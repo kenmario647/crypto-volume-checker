@@ -1,5 +1,5 @@
 import { Server } from 'socket.io';
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import { WebSocketMessage } from '../types';
 import { VolumeService } from './volumeService';
 import { MomentumService } from './momentumService';
