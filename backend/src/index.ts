@@ -21,7 +21,10 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: [
+      process.env.FRONTEND_URL || "http://localhost:3000",
+      "https://crypto-volume-checker-frontend.onrender.com"
+    ],
     methods: ["GET", "POST"]
   }
 });
@@ -29,7 +32,10 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 5000;
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  origin: [
+    process.env.FRONTEND_URL || "http://localhost:3000",
+    "https://crypto-volume-checker-frontend.onrender.com"
+  ],
   credentials: true
 }));
 
