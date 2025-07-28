@@ -200,63 +200,39 @@ export class VolumeService {
       const volumeHistory = matchingTicker.volumeHistory || [];
       logger.info(`[VOLUME_CHART_DEBUG] ${tableSymbol}: Using accumulated history, length = ${volumeHistory.length}`);
 
-      if (volumeHistory.length < 15) {
-        logger.warn(`[VOLUME_CHART_DEBUG] ${tableSymbol}: Insufficient history (${volumeHistory.length} < 15), waiting for more data to calculate moving averages`);
-        
-        const result = {
-          symbol: tableSymbol,
-          exchange,
-          interval,
-          current24hVolume: matchingTicker.originalQuoteVolume,
-          data: volumeHistory.map((historyItem: any) => ({
-            timestamp: historyItem.timestamp,
-            volume: historyItem.quoteVolume,
-            ma3: null,
-            ma8: null,
-            ma15: null
-          }))
-        };
-
-        logger.info(`Volume chart data for ${tableSymbol} (${exchange}) - waiting for 15 data points to calculate moving averages`);
-        return result;
-      }
-
-      // Use actual accumulated 24h volume history from ticker/24hr
+      // Calculate moving averages with available data
       const volumeData = volumeHistory.map((h: any) => h.quoteVolume);
       const timestamps = volumeHistory.map((h: any) => h.timestamp);
       
-      logger.info(`[VOLUME_CHART_DEBUG] ${tableSymbol}: Using ticker/24hr history, volume range: ${Math.min(...volumeData).toFixed(0)} - ${Math.max(...volumeData).toFixed(0)}`);
-      
-      // Take only the most recent data points for display
-      const displayLimit = Math.min(limit, volumeHistory.length);
-      const recentHistory = volumeHistory.slice(-displayLimit);
-      const recentVolumeData = volumeData.slice(-displayLimit);
-
-      // Calculate moving averages
-      const ma3 = this.calculateMovingAverage(recentVolumeData, 3);
-      const ma8 = this.calculateMovingAverage(recentVolumeData, 8);
-      const ma15 = this.calculateMovingAverage(recentVolumeData, 15);
+      // Calculate moving averages (will return null for insufficient data points)
+      const ma3 = this.calculateMovingAverage(volumeData, 3);
+      const ma8 = this.calculateMovingAverage(volumeData, 8);
+      const ma15 = this.calculateMovingAverage(volumeData, 15);
 
       const result = {
         symbol: tableSymbol,
         exchange,
         interval,
         current24hVolume: matchingTicker.originalQuoteVolume,
-        data: recentHistory.map((historyItem: any, index: number) => ({
+        data: volumeHistory.map((historyItem: any, index: number) => ({
           timestamp: historyItem.timestamp,
-          volume: recentVolumeData[index],
+          volume: volumeData[index],
           ma3: ma3[index],
           ma8: ma8[index],
           ma15: ma15[index]
         }))
       };
 
-      // Perform cross detection
-      logger.info(`[CROSS_DEBUG] About to call performCrossDetection for ${tableSymbol} (${exchange}) with ${result.data.length} data points`);
-      this.performCrossDetection(tableSymbol, exchange as 'binance' | 'upbit', result.data);
-      logger.info(`[CROSS_DEBUG] performCrossDetection completed for ${tableSymbol} (${exchange})`);
+      // Only perform cross detection if we have enough data for MA8 (minimum for golden cross)
+      if (volumeHistory.length >= 8) {
+        logger.info(`[CROSS_DEBUG] About to call performCrossDetection for ${tableSymbol} (${exchange}) with ${result.data.length} data points`);
+        this.performCrossDetection(tableSymbol, exchange as 'binance' | 'upbit', result.data);
+        logger.info(`[CROSS_DEBUG] performCrossDetection completed for ${tableSymbol} (${exchange})`);
+      } else {
+        logger.warn(`[VOLUME_CHART_DEBUG] ${tableSymbol}: Insufficient history (${volumeHistory.length} < 8) for cross detection, showing available MAs only`);
+      }
 
-      logger.info(`Volume chart data for ${tableSymbol} (${exchange}) retrieved from ticker/24hr history. Current 24h volume: ${matchingTicker.originalQuoteVolume}`);
+      logger.info(`Volume chart data for ${tableSymbol} (${exchange}) retrieved. MA3: ${ma3.filter(x => x !== null).length}, MA8: ${ma8.filter(x => x !== null).length}, MA15: ${ma15.filter(x => x !== null).length} points available`);
       return result;
     } catch (error) {
       logger.error(`Error fetching volume chart for ${symbol} (${exchange}):`, error);
