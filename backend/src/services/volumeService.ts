@@ -3,18 +3,24 @@ import { logger } from '../utils/logger';
 import { BinanceClient } from './binanceClient';
 import { UpbitClient } from './upbitClient';
 import CrossDetectionService from './crossDetectionService';
+import TradeRecommendationService from './tradeRecommendationService';
+import TradeExecutionService from './tradeExecutionService';
 import { Server } from 'socket.io';
 
 export class VolumeService {
   private binanceClient: BinanceClient;
   private upbitClient: UpbitClient;
   private crossDetectionService: CrossDetectionService;
+  private tradeRecommendationService: TradeRecommendationService;
+  private tradeExecutionService: TradeExecutionService;
   private io?: Server;
 
   constructor(io?: Server) {
     this.binanceClient = new BinanceClient();
     this.upbitClient = new UpbitClient();
     this.crossDetectionService = new CrossDetectionService();
+    this.tradeRecommendationService = new TradeRecommendationService();
+    this.tradeExecutionService = new TradeExecutionService(io);
     this.io = io;
     
     // クロス検知イベントのリスナーを設定
@@ -243,7 +249,9 @@ export class VolumeService {
       };
 
       // Perform cross detection
+      logger.info(`[CROSS_DEBUG] About to call performCrossDetection for ${tableSymbol} (${exchange}) with ${result.data.length} data points`);
       this.performCrossDetection(tableSymbol, exchange as 'binance' | 'upbit', result.data);
+      logger.info(`[CROSS_DEBUG] performCrossDetection completed for ${tableSymbol} (${exchange})`);
 
       logger.info(`Volume chart data for ${tableSymbol} (${exchange}) retrieved from ticker/24hr history. Current 24h volume: ${matchingTicker.originalQuoteVolume}`);
       return result;
@@ -279,8 +287,8 @@ export class VolumeService {
         });
       }
       
-      // TODO: ここでBybit注文ロジックを呼び出す
-      // this.executeBybitOrder(crossEvent);
+      // 🆕 取引推奨を生成
+      this.generateTradeRecommendation(crossEvent);
     });
 
     this.crossDetectionService.on('deathCross', (crossEvent) => {
@@ -308,21 +316,87 @@ export class VolumeService {
   }
 
   /**
+   * 自動取引実行（保守的価格で指値注文）
+   */
+  private async generateTradeRecommendation(crossEvent: any): Promise<void> {
+    try {
+      // 自動取引が有効かチェック
+      const autoTradeEnabled = process.env.AUTO_TRADE_ENABLED === 'true';
+      if (!autoTradeEnabled) {
+        logger.info(`⚠️ Auto trade disabled for ${crossEvent.symbol}, skipping auto trade`);
+        return;
+      }
+
+      logger.info(`🔥 Auto executing LIMIT LONG for ${crossEvent.symbol} (${crossEvent.exchange})`);
+      
+      const recommendation = await this.tradeRecommendationService.generateLimitLongRecommendation(crossEvent);
+      
+      // 保守的価格で自動発注
+      const conservativePrice = recommendation.recommendation.priceOptions.conservative.price;
+      const quantity = recommendation.recommendation.quantity;
+      
+      logger.info(`📊 Auto placing order: ${crossEvent.symbol} x${quantity} @ $${conservativePrice.toFixed(2)} (conservative)`);
+      
+      const orderResult = await this.tradeExecutionService.executeLimitLongPosition(
+        recommendation,
+        conservativePrice
+      );
+      
+      if (this.io) {
+        this.io.emit('orderPlaced', {
+          type: 'auto_limit_long',
+          symbol: crossEvent.symbol,
+          orderId: orderResult.orderId,
+          quantity: quantity,
+          limitPrice: conservativePrice,
+          timestamp: Date.now()
+        });
+      }
+      
+      logger.info(`✅ AUTO LIMIT LONG executed for ${crossEvent.symbol}: Order ID ${orderResult.orderId}`);
+    } catch (error) {
+      logger.error(`❌ Failed to execute auto trade for ${crossEvent.symbol}:`, error);
+      
+      // エラー通知
+      if (this.io) {
+        this.io.emit('tradeRecommendationError', {
+          type: 'auto_trade_failed',
+          symbol: crossEvent.symbol,
+          exchange: crossEvent.exchange,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: Date.now()
+        });
+      }
+    }
+  }
+
+  /**
    * クロス検知を実行
    */
   private performCrossDetection(symbol: string, exchange: 'binance' | 'upbit', volumeData: any[]): void {
     try {
       logger.info(`[CROSS_DETECTION] Starting detection for ${symbol} (${exchange})`);
+      logger.info(`[CROSS_DETECTION] Volume data length: ${volumeData.length}`);
       logger.info(`[CROSS_DETECTION] Volume data sample: ${JSON.stringify(volumeData.slice(-2), null, 2)}`);
+      
+      // Check if we have valid MA data
+      const hasValidMA = volumeData.some(d => d.ma3 !== null && d.ma8 !== null);
+      logger.info(`[CROSS_DETECTION] Has valid MA data: ${hasValidMA}`);
       
       // Binanceランキング上位20銘柄のみチェック
       if (exchange === 'binance') {
+        logger.info(`[CROSS_DETECTION] Calling detectCross for Binance ${symbol}`);
         // realTimeVolumeServiceから上位20銘柄を取得する必要があるが、
         // ここでは一旦全ての銘柄をチェック
         this.crossDetectionService.detectCross(symbol, exchange, volumeData);
+        logger.info(`[CROSS_DETECTION] detectCross call completed for Binance ${symbol}`);
       } else if (exchange === 'upbit') {
+        logger.info(`[CROSS_DETECTION] Calling detectCross for Upbit ${symbol}`);
         // Upbitの場合も同様にチェック
         this.crossDetectionService.detectCross(symbol, exchange, volumeData);
+        logger.info(`[CROSS_DETECTION] detectCross call completed for Upbit ${symbol}`);
+      } else {
+        logger.warn(`[CROSS_DETECTION] Unknown exchange: ${exchange}`);
       }
       
       logger.info(`[CROSS_DETECTION] Detection completed for ${symbol} (${exchange})`);

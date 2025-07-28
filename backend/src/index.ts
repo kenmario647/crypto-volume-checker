@@ -9,6 +9,7 @@ import volumeRoutes from './routes/volume';
 import momentumRoutes from './routes/momentum';
 import exchangeRoutes from './routes/exchange';
 import volumeRankingRoutes from './routes/volumeRanking';
+import tradeRoutes, { initializeTradeRoutes } from './routes/tradeRoutes';
 import { WebSocketService } from './services/websocket';
 import RealTimeVolumeService from './services/realTimeVolumeService';
 import { setRealTimeVolumeService } from './controllers/volumeRankingController';
@@ -39,6 +40,7 @@ app.use('/api/volume', volumeRoutes);
 app.use('/api/momentum', momentumRoutes);
 app.use('/api/exchange', exchangeRoutes);
 app.use('/api/volume-ranking', volumeRankingRoutes);
+app.use('/api/trade', initializeTradeRoutes(io));
 
 app.get('/health', (req, res) => {
   res.status(200).json({ 
