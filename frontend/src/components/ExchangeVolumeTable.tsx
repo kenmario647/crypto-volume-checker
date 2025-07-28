@@ -52,7 +52,7 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
     fetchRankings();
 
     // Setup WebSocket connection for real-time updates
-    const socket = io('http://localhost:5000');
+    const socket = io(process.env.REACT_APP_API_URL || 'http://localhost:5000');
 
     socket.on('volume-ranking-update', (data: any) => {
       if (autoUpdate) {
@@ -73,7 +73,7 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
 
   const fetchRankings = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/volume-ranking/top20');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/volume-ranking/top20`);
       const result = await response.json();
       
       if (result.success) {

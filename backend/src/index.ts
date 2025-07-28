@@ -63,9 +63,18 @@ setRealTimeVolumeService(realTimeVolumeService);
 // Set io instance for cross detection notifications
 setIoInstance(io);
 
-// Temporarily disable WebSocket connections to prevent server crashes
-// Will re-enable after fixing performance issues
-console.log('WebSocket connections temporarily disabled for stability');
+// WebSocket connection handlers
+io.on('connection', (socket) => {
+  logger.info(`🔌 WebSocket client connected: ${socket.id}`);
+  
+  socket.on('disconnect', (reason) => {
+    logger.info(`🔌 WebSocket client disconnected: ${socket.id}, reason: ${reason}`);
+  });
+  
+  socket.on('error', (error) => {
+    logger.error(`🔌 WebSocket error for client ${socket.id}:`, error);
+  });
+});
 
 const webSocketService = new WebSocketService(io, realTimeVolumeService);
 webSocketService.initialize();

@@ -49,12 +49,26 @@ const NotificationTab: React.FC = () => {
 
   useEffect(() => {
     // WebSocket接続
-    const socketInstance = io('http://localhost:5000');
+    console.log(`🔌 Attempting WebSocket connection to ${process.env.REACT_APP_API_URL || 'http://localhost:5000'}`);
+    const socketInstance = io(process.env.REACT_APP_API_URL || 'http://localhost:5000');
     setSocket(socketInstance);
+
+    // 接続状態のログ
+    socketInstance.on('connect', () => {
+      console.log('🔌 WebSocket connected successfully');
+    });
+
+    socketInstance.on('connect_error', (error) => {
+      console.error('🔌 WebSocket connection error:', error);
+    });
+
+    socketInstance.on('disconnect', (reason) => {
+      console.log('🔌 WebSocket disconnected:', reason);
+    });
 
     // クロスアラート受信
     socketInstance.on('crossAlert', (data: CrossAlert) => {
-      console.log('Received cross alert:', data);
+      console.log('🚨 Received cross alert:', data);
       
       const newAlert = {
         ...data,

@@ -75,7 +75,7 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
       
       // API endpoint for volume chart data
       const response = await fetch(
-        `http://localhost:5000/api/volume/symbol/${exchange}/${symbol}?interval=5m&limit=36`
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/volume/symbol/${exchange}/${symbol}?interval=5m&limit=36`
       );
       
       if (response.ok) {
