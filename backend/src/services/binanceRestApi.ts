@@ -47,19 +47,27 @@ export class BinanceRestApiService extends EventEmitter {
   }
 
   private async fetchVolumeData() {
+    const startTime = Date.now();
     try {
       logger.info('Fetching Binance futures (PERP) volume data via REST API...');
       
       // Binance Futures 24hr ticker REST API for perpetual contracts
-      const response = await axios.get('https://fapi.binance.com/fapi/v1/ticker/24hr');
+      const response = await axios.get('https://fapi.binance.com/fapi/v1/ticker/24hr', {
+        timeout: 10000 // 10 second timeout
+      });
       
       if (response.status === 200 && Array.isArray(response.data)) {
+        const processingStart = Date.now();
         this.processTickerData(response.data);
+        const processingTime = Date.now() - processingStart;
+        const totalTime = Date.now() - startTime;
+        logger.info(`Binance data processed: ${response.data.length} tickers, processing: ${processingTime}ms, total: ${totalTime}ms`);
       } else {
         logger.error('Invalid response from Binance Futures API:', response.status);
       }
     } catch (error) {
-      logger.error('Error fetching Binance futures data:', error);
+      const totalTime = Date.now() - startTime;
+      logger.error(`Error fetching Binance futures data (${totalTime}ms):`, error);
     }
   }
 

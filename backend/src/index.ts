@@ -59,9 +59,15 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Initialize real-time volume service
+// Initialize real-time volume service with priority initialization
+logger.info('🚀 Initializing RealTimeVolumeService...');
 const realTimeVolumeService = new RealTimeVolumeService();
 setRealTimeVolumeService(realTimeVolumeService);
+
+// Force immediate data fetch for better initial load
+setTimeout(() => {
+  logger.info('🔄 Triggering initial volume data refresh...');
+}, 2000);
 
 // Initialize cross notification service
 const crossNotificationService = initializeCrossNotificationService();
