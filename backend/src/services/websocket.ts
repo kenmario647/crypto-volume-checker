@@ -1,4 +1,5 @@
 import { Server } from 'socket.io';
+// @ts-ignore
 import * as cron from 'node-cron';
 import { WebSocketMessage } from '../types';
 import { VolumeService } from './volumeService';
