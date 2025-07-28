@@ -169,7 +169,7 @@ export class ExchangeService {
   }
 
   private generateHourlyVolumeData() {
-    const hours = [];
+    const hours: { hour: number; volume: number; change: number }[] = [];
     const baseVolume = 1000000000;
     
     for (let i = 0; i < 24; i++) {
