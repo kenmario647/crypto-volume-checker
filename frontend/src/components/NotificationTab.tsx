@@ -48,45 +48,94 @@ const NotificationTab: React.FC = () => {
   const [showDeathCross, setShowDeathCross] = useState(true);
 
   useEffect(() => {
-    // WebSocket接続
-    console.log(`🔌 Attempting WebSocket connection to ${process.env.REACT_APP_API_URL || 'http://localhost:5000'}`);
-    const socketInstance = io(process.env.REACT_APP_API_URL || 'http://localhost:5000');
-    setSocket(socketInstance);
+    // ブラウザ通知権限をリクエスト
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        console.log('📱 Notification permission:', permission);
+      });
+    }
 
-    // 接続状態のログ
-    socketInstance.on('connect', () => {
-      console.log('🔌 WebSocket connected successfully');
-    });
-
-    socketInstance.on('connect_error', (error) => {
-      console.error('🔌 WebSocket connection error:', error);
-    });
-
-    socketInstance.on('disconnect', (reason) => {
-      console.log('🔌 WebSocket disconnected:', reason);
-    });
-
-    // クロスアラート受信
-    socketInstance.on('crossAlert', (data: CrossAlert) => {
-      console.log('🚨 Received cross alert:', data);
+    // 5分サイクルに同期したAPIポーリング
+    const getNextUpdateTime = () => {
+      const now = new Date();
+      const minutes = now.getMinutes();
+      const seconds = now.getSeconds();
+      const nextMinute = Math.ceil(minutes / 5) * 5;
       
-      const newAlert = {
-        ...data,
-        isRead: false
-      };
-      
-      setAlerts(prev => [newAlert, ...prev]);
-      setUnreadCount(prev => prev + 1);
-      
-      // 音声通知
-      if (soundEnabled) {
-        playNotificationSound(data.type);
+      if (nextMinute === 60) {
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1, 0, 10);
+      } else {
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), nextMinute, 10);
       }
-    });
+    };
+
+    const checkForCrosses = async () => {
+      console.log('🔄 Checking for new crosses after volume update...');
+      
+      try {
+        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/notifications/recent-crosses`);
+        const data = await response.json();
+        
+        if (data.success && data.crosses.length > 0) {
+          console.log(`🚨 Found ${data.crosses.length} new crosses!`);
+          
+          data.crosses.forEach((cross: CrossAlert) => {
+            // ブラウザ通知
+            if (Notification.permission === 'granted') {
+              new Notification(
+                `${cross.type === 'golden_cross' ? '🟡 ゴールデンクロス' : '🔴 デスクロス'}`,
+                {
+                  body: `${cross.symbol} (${cross.exchange.toUpperCase()})`,
+                  icon: '/favicon.ico',
+                  badge: '/logo192.png',
+                  requireInteraction: true,
+                  timestamp: cross.timestamp,
+                  tag: cross.id // 重複通知を防ぐ
+                }
+              );
+            }
+            
+            // 音声通知
+            if (soundEnabled) {
+              playNotificationSound(cross.type);
+            }
+            
+            // UI更新
+            setAlerts(prev => [{ ...cross, isRead: false }, ...prev]);
+            setUnreadCount(prev => prev + 1);
+          });
+        } else {
+          console.log('📊 No new crosses found');
+        }
+      } catch (error) {
+        console.error('❌ Failed to check for crosses:', error);
+      }
+    };
+
+    // 5分サイクルに同期してタイマー設定
+    const scheduleNextCheck = () => {
+      const nextTime = getNextUpdateTime();
+      const delay = nextTime.getTime() - Date.now();
+      
+      console.log(`⏰ Next cross check scheduled at ${nextTime.toLocaleTimeString()} (in ${Math.round(delay/1000)}s)`);
+      
+      return setTimeout(() => {
+        checkForCrosses();
+        // 次の5分後にも実行
+        intervalRef.current = setInterval(checkForCrosses, 5 * 60 * 1000);
+      }, delay);
+    };
+
+    // 初回チェック（即座に実行）
+    checkForCrosses();
+
+    const timeoutId = scheduleNextCheck();
+    const intervalRef = { current: null as NodeJS.Timeout | null };
 
     // クリーンアップ
     return () => {
-      socketInstance.disconnect();
+      clearTimeout(timeoutId);
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [soundEnabled]);
 

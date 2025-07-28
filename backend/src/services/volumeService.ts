@@ -5,6 +5,7 @@ import { UpbitClient } from './upbitClient';
 import CrossDetectionService from './crossDetectionService';
 import TradeRecommendationService from './tradeRecommendationService';
 import TradeExecutionService from './tradeExecutionService';
+import CrossNotificationService from './crossNotificationService';
 import { Server } from 'socket.io';
 
 export class VolumeService {
@@ -13,14 +14,16 @@ export class VolumeService {
   private crossDetectionService: CrossDetectionService;
   private tradeRecommendationService: TradeRecommendationService;
   private tradeExecutionService: TradeExecutionService;
+  private crossNotificationService: CrossNotificationService;
   private io?: Server;
 
-  constructor(io?: Server) {
+  constructor(io?: Server, crossNotificationService?: CrossNotificationService) {
     this.binanceClient = new BinanceClient();
     this.upbitClient = new UpbitClient();
     this.crossDetectionService = new CrossDetectionService();
     this.tradeRecommendationService = new TradeRecommendationService();
     this.tradeExecutionService = new TradeExecutionService(io);
+    this.crossNotificationService = crossNotificationService || new CrossNotificationService();
     this.io = io;
     
     // クロス検知イベントのリスナーを設定
@@ -271,7 +274,13 @@ export class VolumeService {
       logger.info(`   MA8: ${crossEvent.previousMa8.toFixed(2)} → ${crossEvent.ma8Value.toFixed(2)}`);
       logger.info(`   Time: ${new Date(crossEvent.timestamp).toLocaleString('ja-JP')}`);
       
-      // WebSocketでフロントエンドに通知送信
+      // 📱 通知サービスに追加（APIポーリング用）
+      this.crossNotificationService.addCrossNotification({
+        ...crossEvent,
+        type: 'golden_cross'
+      });
+
+      // WebSocketでフロントエンドに通知送信（従来通り）
       if (this.io) {
         this.io.emit('crossAlert', {
           id: `${crossEvent.exchange}-${crossEvent.symbol}-${crossEvent.timestamp}`,
@@ -297,7 +306,13 @@ export class VolumeService {
       logger.info(`   MA8: ${crossEvent.previousMa8.toFixed(2)} → ${crossEvent.ma8Value.toFixed(2)}`);
       logger.info(`   Time: ${new Date(crossEvent.timestamp).toLocaleString('ja-JP')}`);
       
-      // WebSocketでフロントエンドに通知送信
+      // 📱 通知サービスに追加（APIポーリング用）
+      this.crossNotificationService.addCrossNotification({
+        ...crossEvent,
+        type: 'death_cross'
+      });
+
+      // WebSocketでフロントエンドに通知送信（従来通り）
       if (this.io) {
         this.io.emit('crossAlert', {
           id: `${crossEvent.exchange}-${crossEvent.symbol}-${crossEvent.timestamp}`,

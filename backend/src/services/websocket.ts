@@ -6,6 +6,7 @@ import { VolumeService } from './volumeService';
 import { MomentumService } from './momentumService';
 import { ExchangeService } from './exchangeService';
 import { RealTimeVolumeService } from './realTimeVolumeService';
+import { getCrossNotificationService } from '../controllers/notificationController';
 import { logger } from '../utils/logger';
 
 export class WebSocketService {
@@ -17,7 +18,8 @@ export class WebSocketService {
 
   constructor(io: Server, realTimeVolumeService: RealTimeVolumeService) {
     this.io = io;
-    this.volumeService = new VolumeService(io);
+    const crossNotificationService = getCrossNotificationService();
+    this.volumeService = new VolumeService(io, crossNotificationService || undefined);
     this.momentumService = new MomentumService();
     this.exchangeService = new ExchangeService();
     this.realTimeVolumeService = realTimeVolumeService;

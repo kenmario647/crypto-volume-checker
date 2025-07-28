@@ -3,6 +3,7 @@ import { VolumeService } from '../services/volumeService';
 import { ApiResponse, VolumeData } from '../types';
 import { logger } from '../utils/logger';
 import { realTimeVolumeService } from './volumeRankingController';
+import { getCrossNotificationService } from './notificationController';
 import { Server } from 'socket.io';
 
 let globalIo: Server | undefined;
@@ -15,7 +16,8 @@ export class VolumeController {
   private volumeService: VolumeService;
 
   constructor() {
-    this.volumeService = new VolumeService(globalIo);
+    const crossNotificationService = getCrossNotificationService();
+    this.volumeService = new VolumeService(globalIo, crossNotificationService || undefined);
   }
 
   async getVolume24h(req: Request, res: Response) {

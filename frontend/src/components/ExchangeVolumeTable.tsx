@@ -78,6 +78,12 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
       
       if (result.success) {
         const data = exchange === 'binance' ? result.data.binance : result.data.upbit;
+        
+        // If Binance data is empty but other exchange has data, show message
+        if (exchange === 'binance' && (!data || data.length === 0) && result.data.upbit && result.data.upbit.length > 0) {
+          console.log('Binance data is still loading, please wait...');
+        }
+        
         setExchangeData(data ? data.slice(0, 20) : []);
         setLastUpdate(new Date(result.data.updateTime).toLocaleTimeString());
       }
@@ -377,7 +383,25 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="300px">
           <CircularProgress />
           <Typography variant="h6" sx={{ ml: 2, color: 'text.secondary' }}>
-            Loading volume rankings...
+            Loading {exchange} rankings...
+          </Typography>
+        </Box>
+      </Paper>
+    );
+  }
+
+  // Show empty state for binance if no data yet
+  if (exchange === 'binance' && exchangeData.length === 0) {
+    return (
+      <Paper sx={{ p: 3, backgroundColor: 'background.paper', border: '1px solid #333' }}>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="300px" flexDirection="column">
+          <CircularProgress sx={{ mb: 2 }} />
+          <Typography variant="h6" sx={{ color: 'text.secondary', mb: 1 }}>
+            Binance data is initializing...
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>
+            Fetching futures volume data from Binance API.<br/>
+            This may take a few moments on first load.
           </Typography>
         </Box>
       </Paper>

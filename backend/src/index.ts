@@ -9,11 +9,13 @@ import volumeRoutes from './routes/volume';
 import momentumRoutes from './routes/momentum';
 import exchangeRoutes from './routes/exchange';
 import volumeRankingRoutes from './routes/volumeRanking';
+import notificationRoutes from './routes/notifications';
 import tradeRoutes, { initializeTradeRoutes } from './routes/tradeRoutes';
 import { WebSocketService } from './services/websocket';
 import RealTimeVolumeService from './services/realTimeVolumeService';
 import { setRealTimeVolumeService } from './controllers/volumeRankingController';
 import { setIoInstance } from './controllers/volumeController';
+import { initializeCrossNotificationService, setCrossNotificationService } from './controllers/notificationController';
 
 dotenv.config();
 
@@ -46,6 +48,7 @@ app.use('/api/volume', volumeRoutes);
 app.use('/api/momentum', momentumRoutes);
 app.use('/api/exchange', exchangeRoutes);
 app.use('/api/volume-ranking', volumeRankingRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/trade', initializeTradeRoutes(io));
 
 app.get('/health', (req, res) => {
@@ -59,6 +62,10 @@ app.get('/health', (req, res) => {
 // Initialize real-time volume service
 const realTimeVolumeService = new RealTimeVolumeService();
 setRealTimeVolumeService(realTimeVolumeService);
+
+// Initialize cross notification service
+const crossNotificationService = initializeCrossNotificationService();
+setCrossNotificationService(crossNotificationService);
 
 // Set io instance for cross detection notifications
 setIoInstance(io);

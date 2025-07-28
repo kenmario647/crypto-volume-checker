@@ -29,8 +29,16 @@ export class BinanceRestApiService extends EventEmitter {
   }
 
   private startPeriodicFetch() {
-    // Initial fetch
+    // Initial fetch immediately
     this.fetchVolumeData();
+    
+    // Schedule additional immediate fetch after 10 seconds in case first one fails
+    setTimeout(() => {
+      if (this.volumeData.size === 0) {
+        logger.info('Retrying Binance data fetch (backup)...');
+        this.fetchVolumeData();
+      }
+    }, 10000);
     
     // Fetch every 5 minutes
     this.updateInterval = setInterval(() => {
