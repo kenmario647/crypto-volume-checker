@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: crypto-volume-checker-backend
+    env: node
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: crypto-volume-checker-frontend
+          property: url
+      - key: BYBIT_API_KEY
+        sync: false
+      - key: BYBIT_API_SECRET
+        sync: false
+      - key: BYBIT_TESTNET
+        value: false
+      - key: AUTO_TRADE_ENABLED
+        value: true
+      - key: POSITION_SIZE_PERCENT
+        value: 1.0
+      - key: MIN_TRADE_BALANCE
+        value: 10
+
+  - type: web
+    name: crypto-volume-checker-frontend
+    env: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/build
+    plan: free
+    envVars:
+      - key: REACT_APP_API_URL
+        fromService:
+          type: web
+          name: crypto-volume-checker-backend
+          property: url

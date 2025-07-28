@@ -64,7 +64,7 @@ const TradingDashboard: React.FC = () => {
 
   useEffect(() => {
     // WebSocket接続
-    const socketInstance = io('http://localhost:5000');
+    const socketInstance = io(process.env.REACT_APP_API_URL || 'http://localhost:5000');
     setSocket(socketInstance);
 
     // 取引推奨受信
@@ -137,7 +137,7 @@ const TradingDashboard: React.FC = () => {
 
   const fetchActiveOrders = async () => {
     try {
-      const response = await fetch('/api/trade/active-orders');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/trade/active-orders`);
       const result = await response.json();
       
       if (result.success) {

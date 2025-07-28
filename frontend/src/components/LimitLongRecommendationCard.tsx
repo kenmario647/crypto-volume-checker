@@ -86,7 +86,7 @@ const LimitLongRecommendationCard: React.FC<LimitLongRecommendationCardProps> = 
   const handleExecuteLimitLong = async () => {
     setExecuting(true);
     try {
-      const response = await fetch('/api/trade/execute-limit-long', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/trade/execute-limit-long`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
