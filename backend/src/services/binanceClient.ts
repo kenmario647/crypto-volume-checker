@@ -105,6 +105,7 @@ export class BinanceClient {
       const formattedData = response.data.map((item: any) => ({
         symbol: item.symbol,
         price: item.lastPrice,
+        lastPrice: item.lastPrice,
         volume: item.volume,
         count: item.count,
         priceChangePercent: item.priceChangePercent,
@@ -119,16 +120,15 @@ export class BinanceClient {
     }
   }
 
-  async getTopVolumeSymbols(limit = 10): Promise<BinanceTickerData[]> {
+  async getTopVolumeSymbols(limit = 15): Promise<BinanceTickerData[]> {
     try {
       const tickers = await this.getTicker24h();
       
       const topVolume = tickers
         .filter(ticker => ticker.symbol.endsWith('USDT'))
-        .sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
-        .slice(0, limit);
+        .sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume));
 
-      logger.info(`Top ${limit} volume symbols retrieved from Binance`);
+      logger.info(`All ${topVolume.length} volume symbols retrieved from Binance`);
       return topVolume;
     } catch (error) {
       logger.error('Error fetching top volume symbols:', error);

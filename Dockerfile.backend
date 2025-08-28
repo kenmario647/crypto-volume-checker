@@ -1,0 +1,20 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY backend/package*.json ./backend/
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install --prefix backend
+
+# Copy source code
+COPY backend ./backend
+
+# Build
+RUN npm run build --prefix backend
+
+EXPOSE 5000
+
+CMD ["node", "backend/dist/index.js"]

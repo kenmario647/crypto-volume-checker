@@ -2,6 +2,10 @@ import { VolumeData } from '../types';
 import { logger } from '../utils/logger';
 import { BinanceClient } from './binanceClient';
 import { UpbitClient } from './upbitClient';
+import { BybitClient } from './bybitClient';
+import { OKXClient } from './okxClient';
+import { GateIOClient } from './gateioClient';
+import { BitgetClient } from './bitgetClient';
 import CrossDetectionService from './crossDetectionService';
 import TradeRecommendationService from './tradeRecommendationService';
 import TradeExecutionService from './tradeExecutionService';
@@ -11,6 +15,10 @@ import { Server } from 'socket.io';
 export class VolumeService {
   private binanceClient: BinanceClient;
   private upbitClient: UpbitClient;
+  private bybitClient: BybitClient;
+  private okxClient: OKXClient;
+  private gateioClient: GateIOClient;
+  private bitgetClient: BitgetClient;
   private crossDetectionService: CrossDetectionService;
   private tradeRecommendationService: TradeRecommendationService;
   private tradeExecutionService: TradeExecutionService;
@@ -20,6 +28,10 @@ export class VolumeService {
   constructor(io?: Server, crossNotificationService?: CrossNotificationService) {
     this.binanceClient = new BinanceClient();
     this.upbitClient = new UpbitClient();
+    this.bybitClient = BybitClient.getInstance();
+    this.okxClient = OKXClient.getInstance();
+    this.gateioClient = GateIOClient.getInstance();
+    this.bitgetClient = BitgetClient.getInstance();
     this.crossDetectionService = new CrossDetectionService();
     this.tradeRecommendationService = new TradeRecommendationService();
     this.tradeExecutionService = new TradeExecutionService(io);
@@ -75,7 +87,7 @@ export class VolumeService {
 
   private async getBinanceVolume() {
     try {
-      const topVolume = await this.binanceClient.getTopVolumeSymbols(10);
+      const topVolume = await this.binanceClient.getTopVolumeSymbols(15);
       const totalVolume = topVolume.reduce((sum, ticker) => sum + parseFloat(ticker.quoteVolume), 0);
 
       return {
@@ -171,6 +183,16 @@ export class VolumeService {
         if (matchingTicker) {
           tableSymbol = matchingTicker.symbol.replace('USDT', '');
         }
+      } else if (exchange === 'binance-spot') {
+        const binanceSpotData = realTimeVolumeService.getBinanceSpotData();
+        const searchSymbol = symbol.endsWith('USDT') ? symbol.replace('USDT', '') : symbol;
+        matchingTicker = binanceSpotData.find((ticker: any) => {
+          const tickerSymbol = ticker.symbol.replace('USDT', '');
+          return tickerSymbol === searchSymbol || ticker.symbol === symbol;
+        });
+        if (matchingTicker) {
+          tableSymbol = matchingTicker.symbol.replace('USDT', '');
+        }
       } else if (exchange === 'upbit') {
         const upbitData = realTimeVolumeService.getUpbitData();
         const searchSymbol = symbol.startsWith('KRW-') ? symbol.replace('KRW-', '') : symbol;
@@ -186,6 +208,74 @@ export class VolumeService {
           logger.info(`[UPBIT_CHART_DEBUG] Found matching upbit ticker: ${tableSymbol}, exchange: ${matchingTicker.exchange}`);
         } else {
           logger.warn(`[UPBIT_CHART_DEBUG] No matching upbit ticker found for: ${searchSymbol}`);
+        }
+      } else if (exchange === 'bybit') {
+        const bybitData = realTimeVolumeService.getBybitData ? realTimeVolumeService.getBybitData() : [];
+        const searchSymbol = symbol.endsWith('USDT') ? symbol.replace('USDT', '') : symbol;
+        matchingTicker = bybitData.find((ticker: any) => {
+          const tickerSymbol = ticker.symbol.replace('USDT', '');
+          return tickerSymbol === searchSymbol || ticker.symbol === symbol;
+        });
+        if (matchingTicker) {
+          tableSymbol = matchingTicker.symbol.replace('USDT', '');
+        }
+      } else if (exchange === 'okx') {
+        const okxData = realTimeVolumeService.getOkxData ? realTimeVolumeService.getOkxData() : [];
+        const searchSymbol = symbol.endsWith('-USDT') ? symbol.replace('-USDT', '') : symbol;
+        matchingTicker = okxData.find((ticker: any) => {
+          const tickerSymbol = ticker.symbol.replace('-USDT', '');
+          return tickerSymbol === searchSymbol || ticker.symbol === symbol;
+        });
+        if (matchingTicker) {
+          tableSymbol = matchingTicker.symbol.replace('-USDT', '');
+        }
+      } else if (exchange === 'gateio') {
+        const gateioData = realTimeVolumeService.getGateioData ? realTimeVolumeService.getGateioData() : [];
+        const searchSymbol = symbol.endsWith('-USDT') ? symbol.replace('-USDT', '') : symbol;
+        matchingTicker = gateioData.find((ticker: any) => {
+          const tickerSymbol = ticker.symbol.replace('-USDT', '');
+          return tickerSymbol === searchSymbol || ticker.symbol === symbol;
+        });
+        if (matchingTicker) {
+          tableSymbol = matchingTicker.symbol.replace('-USDT', '');
+        }
+      } else if (exchange === 'bitget') {
+        const bitgetData = realTimeVolumeService.getBitgetData ? realTimeVolumeService.getBitgetData() : [];
+        const searchSymbol = symbol.endsWith('-USDT') ? symbol.replace('-USDT', '') : symbol;
+        matchingTicker = bitgetData.find((ticker: any) => {
+          const tickerSymbol = ticker.symbol.replace('-USDT', '');
+          return tickerSymbol === searchSymbol || ticker.symbol === symbol;
+        });
+        if (matchingTicker) {
+          tableSymbol = matchingTicker.symbol.replace('-USDT', '');
+        }
+      } else if (exchange === 'mexc') {
+        // MEXC has both spot and futures data
+        const mexcData = realTimeVolumeService.getMexcData ? realTimeVolumeService.getMexcData() : { spot: [], futures: [] };
+        const allMexcData = [...mexcData.spot, ...mexcData.futures];
+        const searchSymbol = symbol.endsWith('USDT') ? symbol.replace('USDT', '') : symbol;
+        matchingTicker = allMexcData.find((ticker: any) => {
+          const tickerSymbol = ticker.symbol.replace('USDT', '');
+          return tickerSymbol === searchSymbol || ticker.symbol === symbol;
+        });
+        if (matchingTicker) {
+          tableSymbol = matchingTicker.symbol.replace('USDT', '');
+        }
+      } else if (exchange === 'bithumb') {
+        const bithumbData = realTimeVolumeService.getBithumbData ? realTimeVolumeService.getBithumbData() : [];
+        matchingTicker = bithumbData.find((ticker: any) => 
+          ticker.symbol === symbol
+        );
+        if (matchingTicker) {
+          tableSymbol = matchingTicker.symbol;
+        }
+      } else if (exchange === 'coinbase') {
+        const coinbaseData = realTimeVolumeService.getCoinbaseData ? realTimeVolumeService.getCoinbaseData() : [];
+        matchingTicker = coinbaseData.find((ticker: any) => 
+          ticker.symbol === symbol
+        );
+        if (matchingTicker) {
+          tableSymbol = matchingTicker.symbol;
         }
       }
 
@@ -205,9 +295,9 @@ export class VolumeService {
       const timestamps = volumeHistory.map((h: any) => h.timestamp);
       
       // Calculate moving averages (will return null for insufficient data points)
-      const ma3 = this.calculateMovingAverage(volumeData, 3);
-      const ma8 = this.calculateMovingAverage(volumeData, 8);
-      const ma15 = this.calculateMovingAverage(volumeData, 15);
+      const ma2 = this.calculateMovingAverage(volumeData, 2);
+      const ma5 = this.calculateMovingAverage(volumeData, 5);
+      const ma10 = this.calculateMovingAverage(volumeData, 10);
 
       const result = {
         symbol: tableSymbol,
@@ -217,22 +307,22 @@ export class VolumeService {
         data: volumeHistory.map((historyItem: any, index: number) => ({
           timestamp: historyItem.timestamp,
           volume: volumeData[index],
-          ma3: ma3[index],
-          ma8: ma8[index],
-          ma15: ma15[index]
+          ma2: ma2[index],
+          ma5: ma5[index],
+          ma10: ma10[index]
         }))
       };
 
-      // Only perform cross detection if we have enough data for MA8 (minimum for golden cross)
-      if (volumeHistory.length >= 8) {
+      // Only perform cross detection if we have enough data for MA5 (minimum for golden cross)
+      if (volumeHistory.length >= 5) {
         logger.info(`[CROSS_DEBUG] About to call performCrossDetection for ${tableSymbol} (${exchange}) with ${result.data.length} data points`);
         this.performCrossDetection(tableSymbol, exchange as 'binance' | 'upbit', result.data);
         logger.info(`[CROSS_DEBUG] performCrossDetection completed for ${tableSymbol} (${exchange})`);
       } else {
-        logger.warn(`[VOLUME_CHART_DEBUG] ${tableSymbol}: Insufficient history (${volumeHistory.length} < 8) for cross detection, showing available MAs only`);
+        logger.warn(`[VOLUME_CHART_DEBUG] ${tableSymbol}: Insufficient history (${volumeHistory.length} < 5) for cross detection, showing available MAs only`);
       }
 
-      logger.info(`Volume chart data for ${tableSymbol} (${exchange}) retrieved. MA3: ${ma3.filter(x => x !== null).length}, MA8: ${ma8.filter(x => x !== null).length}, MA15: ${ma15.filter(x => x !== null).length} points available`);
+      logger.info(`Volume chart data for ${tableSymbol} (${exchange}) retrieved. MA2: ${ma2.filter(x => x !== null).length}, MA5: ${ma5.filter(x => x !== null).length}, MA10: ${ma10.filter(x => x !== null).length} points available`);
       return result;
     } catch (error) {
       logger.error(`Error fetching volume chart for ${symbol} (${exchange}):`, error);
@@ -246,8 +336,8 @@ export class VolumeService {
   private setupCrossEventListeners(): void {
     this.crossDetectionService.on('goldenCross', (crossEvent) => {
       logger.info(`🚀 Golden Cross Alert: ${crossEvent.symbol} (${crossEvent.exchange})`);
-      logger.info(`   MA3: ${crossEvent.previousMa3.toFixed(2)} → ${crossEvent.ma3Value.toFixed(2)}`);
-      logger.info(`   MA8: ${crossEvent.previousMa8.toFixed(2)} → ${crossEvent.ma8Value.toFixed(2)}`);
+      logger.info(`   MA2: ${crossEvent.previousMa2.toFixed(2)} → ${crossEvent.ma2Value.toFixed(2)}`);
+      logger.info(`   MA5: ${crossEvent.previousMa5.toFixed(2)} → ${crossEvent.ma5Value.toFixed(2)}`);
       logger.info(`   Time: ${new Date(crossEvent.timestamp).toLocaleString('ja-JP')}`);
       
       // 📱 通知サービスに追加（APIポーリング用）
@@ -256,21 +346,7 @@ export class VolumeService {
         type: 'golden_cross'
       });
 
-      // WebSocketでフロントエンドに通知送信（従来通り）
-      if (this.io) {
-        this.io.emit('crossAlert', {
-          id: `${crossEvent.exchange}-${crossEvent.symbol}-${crossEvent.timestamp}`,
-          type: 'golden_cross',
-          symbol: crossEvent.symbol,
-          exchange: crossEvent.exchange,
-          timestamp: crossEvent.timestamp,
-          ma3Value: crossEvent.ma3Value,
-          ma8Value: crossEvent.ma8Value,
-          previousMa3: crossEvent.previousMa3,
-          previousMa8: crossEvent.previousMa8,
-          message: `${crossEvent.symbol} (${crossEvent.exchange.toUpperCase()})`
-        });
-      }
+      // WebSocket通知は削除（APIポーリングのみ使用）
       
       // 🆕 取引推奨を生成
       this.generateTradeRecommendation(crossEvent);
@@ -278,8 +354,8 @@ export class VolumeService {
 
     this.crossDetectionService.on('deathCross', (crossEvent) => {
       logger.info(`📉 Death Cross Alert: ${crossEvent.symbol} (${crossEvent.exchange})`);
-      logger.info(`   MA3: ${crossEvent.previousMa3.toFixed(2)} → ${crossEvent.ma3Value.toFixed(2)}`);
-      logger.info(`   MA8: ${crossEvent.previousMa8.toFixed(2)} → ${crossEvent.ma8Value.toFixed(2)}`);
+      logger.info(`   MA2: ${crossEvent.previousMa2.toFixed(2)} → ${crossEvent.ma2Value.toFixed(2)}`);
+      logger.info(`   MA5: ${crossEvent.previousMa5.toFixed(2)} → ${crossEvent.ma5Value.toFixed(2)}`);
       logger.info(`   Time: ${new Date(crossEvent.timestamp).toLocaleString('ja-JP')}`);
       
       // 📱 通知サービスに追加（APIポーリング用）
@@ -296,10 +372,10 @@ export class VolumeService {
           symbol: crossEvent.symbol,
           exchange: crossEvent.exchange,
           timestamp: crossEvent.timestamp,
-          ma3Value: crossEvent.ma3Value,
-          ma8Value: crossEvent.ma8Value,
-          previousMa3: crossEvent.previousMa3,
-          previousMa8: crossEvent.previousMa8,
+          ma2Value: crossEvent.ma2Value,
+          ma5Value: crossEvent.ma5Value,
+          previousMa2: crossEvent.previousMa2,
+          previousMa5: crossEvent.previousMa5,
           message: `${crossEvent.symbol} (${crossEvent.exchange.toUpperCase()})`
         });
       }
@@ -364,23 +440,23 @@ export class VolumeService {
   /**
    * クロス検知を実行
    */
-  private performCrossDetection(symbol: string, exchange: 'binance' | 'upbit', volumeData: any[]): void {
+  private performCrossDetection(symbol: string, exchange: 'binance' | 'binance-spot' | 'upbit', volumeData: any[]): void {
     try {
       logger.info(`[CROSS_DETECTION] Starting detection for ${symbol} (${exchange})`);
       logger.info(`[CROSS_DETECTION] Volume data length: ${volumeData.length}`);
       logger.info(`[CROSS_DETECTION] Volume data sample: ${JSON.stringify(volumeData.slice(-2), null, 2)}`);
       
       // Check if we have valid MA data
-      const hasValidMA = volumeData.some(d => d.ma3 !== null && d.ma8 !== null);
+      const hasValidMA = volumeData.some(d => d.ma2 !== null && d.ma5 !== null);
       logger.info(`[CROSS_DETECTION] Has valid MA data: ${hasValidMA}`);
       
       // Binanceランキング上位20銘柄のみチェック
-      if (exchange === 'binance') {
-        logger.info(`[CROSS_DETECTION] Calling detectCross for Binance ${symbol}`);
+      if (exchange === 'binance' || exchange === 'binance-spot') {
+        logger.info(`[CROSS_DETECTION] Calling detectCross for ${exchange} ${symbol}`);
         // realTimeVolumeServiceから上位20銘柄を取得する必要があるが、
         // ここでは一旦全ての銘柄をチェック
         this.crossDetectionService.detectCross(symbol, exchange, volumeData);
-        logger.info(`[CROSS_DETECTION] detectCross call completed for Binance ${symbol}`);
+        logger.info(`[CROSS_DETECTION] detectCross call completed for ${exchange} ${symbol}`);
       } else if (exchange === 'upbit') {
         logger.info(`[CROSS_DETECTION] Calling detectCross for Upbit ${symbol}`);
         // Upbitの場合も同様にチェック

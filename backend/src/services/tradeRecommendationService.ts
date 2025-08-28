@@ -149,9 +149,9 @@ export class TradeRecommendationService {
 
   private calculateConfidence(crossEvent: CrossEvent): number {
     // シンプルな信頼度計算
-    const ma3 = crossEvent.ma3Value;
-    const ma8 = crossEvent.ma8Value;
-    const crossStrength = ((ma3 - ma8) / ma8) * 100;
+    const ma2 = crossEvent.ma2Value;
+    const ma5 = crossEvent.ma5Value;
+    const crossStrength = ((ma2 - ma5) / ma5) * 100;
     
     // クロス強度が大きいほど信頼度高
     const confidence = Math.min(95, 50 + (crossStrength * 10));

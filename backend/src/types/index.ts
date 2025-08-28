@@ -4,6 +4,7 @@ export interface VolumeData {
   volumeUsd: number;
   change24h: number;
   timestamp: Date;
+  marketType?: 'SPOT' | 'PERP';
 }
 
 export interface MomentumData {

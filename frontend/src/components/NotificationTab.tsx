@@ -29,12 +29,12 @@ interface CrossAlert {
   id: string;
   type: 'golden_cross' | 'death_cross';
   symbol: string;
-  exchange: 'binance' | 'upbit';
+  exchange: 'binance' | 'binance-spot' | 'upbit';
   timestamp: number;
-  ma3Value: number;
-  ma8Value: number;
-  previousMa3: number;
-  previousMa8: number;
+  ma2Value: number;
+  ma5Value: number;
+  previousMa2: number;
+  previousMa5: number;
   message: string;
   isRead?: boolean;
 }
@@ -202,7 +202,10 @@ const NotificationTab: React.FC = () => {
     });
   };
 
-  const formatValue = (value: number) => {
+  const formatValue = (value: number | undefined) => {
+    if (value === undefined || value === null || isNaN(value)) {
+      return 'N/A';
+    }
     if (value >= 1e9) {
       return `$${(value / 1e9).toFixed(2)}B`;
     } else if (value >= 1e6) {
@@ -221,10 +224,10 @@ const NotificationTab: React.FC = () => {
   });
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
+    <Box sx={{ p: 1, maxWidth: 1200, mx: 'auto' }}>
       {/* ヘッダー */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" sx={{ color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Typography variant="body1" sx={{ color: 'white', display: 'flex', alignItems: 'center', gap: 1, fontWeight: 'bold', fontSize: '0.95rem' }}>
           📱 移動平均クロス通知
           {unreadCount > 0 && (
             <Badge badgeContent={unreadCount} color="error" sx={{ ml: 1 }} />
@@ -248,7 +251,7 @@ const NotificationTab: React.FC = () => {
       </Box>
 
       {/* フィルター設定 */}
-      <Paper sx={{ p: 2, mb: 3, backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
+      <Paper sx={{ p: 1, mb: 1, backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <FilterList sx={{ color: '#999' }} />
@@ -307,7 +310,7 @@ const NotificationTab: React.FC = () => {
 
       {/* アラート一覧 */}
       {filteredAlerts.length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: 'center', backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
+        <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
           <Typography variant="body1" sx={{ color: '#999' }}>
             まだ移動平均クロスが検知されていません
           </Typography>
@@ -364,7 +367,8 @@ const NotificationTab: React.FC = () => {
                           label={alert.exchange.toUpperCase()} 
                           size="small" 
                           sx={{ 
-                            backgroundColor: alert.exchange === 'binance' ? '#F3BA2F' : '#0052FF',
+                            backgroundColor: alert.exchange === 'binance' ? '#F3BA2F' : 
+                                          alert.exchange === 'binance-spot' ? '#4CAF50' : '#0052FF',
                             color: 'white',
                             fontWeight: 'bold'
                           }} 
@@ -389,10 +393,10 @@ const NotificationTab: React.FC = () => {
                         </Typography>
                         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                           <Typography variant="body2" sx={{ color: '#999' }}>
-                            MA3: {formatValue(alert.previousMa3)} → <span style={{ color: '#4caf50' }}>{formatValue(alert.ma3Value)}</span>
+                            MA2: {formatValue(alert.previousMa2)} → <span style={{ color: '#4caf50' }}>{formatValue(alert.ma2Value)}</span>
                           </Typography>
                           <Typography variant="body2" sx={{ color: '#999' }}>
-                            MA8: {formatValue(alert.previousMa8)} → <span style={{ color: '#2196f3' }}>{formatValue(alert.ma8Value)}</span>
+                            MA5: {formatValue(alert.previousMa5)} → <span style={{ color: '#2196f3' }}>{formatValue(alert.ma5Value)}</span>
                           </Typography>
                         </Box>
                       </Box>

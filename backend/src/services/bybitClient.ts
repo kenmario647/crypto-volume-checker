@@ -40,9 +40,9 @@ export class BybitClient {
   private apiSecret: string;
   private baseURL: string;
 
-  constructor() {
-    this.apiKey = process.env.BYBIT_API_KEY!;
-    this.apiSecret = process.env.BYBIT_API_SECRET!;
+  private constructor() {
+    this.apiKey = process.env.BYBIT_API_KEY || '';
+    this.apiSecret = process.env.BYBIT_API_SECRET || '';
     this.baseURL = process.env.BYBIT_TESTNET === 'true' 
       ? 'https://api-testnet.bybit.com' 
       : 'https://api.bybit.com';
@@ -55,6 +55,81 @@ export class BybitClient {
       BybitClient.instance = new BybitClient();
     }
     return BybitClient.instance;
+  }
+
+  // Get tickers for futures/perp
+  async fetchTickers(): Promise<any> {
+    try {
+      const params = {
+        category: 'linear'
+      };
+
+      const response = await this.makeRestRequest('GET', '/v5/market/tickers', params);
+      return response;
+    } catch (error) {
+      logger.error('Error fetching Bybit perp tickers:', error);
+      throw error;
+    }
+  }
+
+  // Get tickers for spot
+  async fetchSpotTickers(): Promise<any> {
+    try {
+      const params = {
+        category: 'spot'
+      };
+
+      const response = await this.makeRestRequest('GET', '/v5/market/tickers', params);
+      return response;
+    } catch (error) {
+      logger.error('Error fetching Bybit spot tickers:', error);
+      throw error;
+    }
+  }
+
+  // Get top volume coins for spot trading
+  async getTopVolumeCoins(limit: number = 100): Promise<any[]> {
+    try {
+      const params = {
+        category: 'spot'
+      };
+
+      const response = await this.makeRestRequest('GET', '/v5/market/tickers', params);
+      
+      if (!response.result || !response.result.list) {
+        throw new Error('Invalid response from Bybit API');
+      }
+
+      const tickers = response.result.list;
+      
+      // Filter for USDT pairs only
+      const usdtPairs = tickers.filter((ticker: any) => ticker.symbol.endsWith('USDT'));
+      
+      // Calculate volume in USDT and sort
+      const volumeData = usdtPairs.map((ticker: any) => {
+        const volume24h = parseFloat(ticker.turnover24h) || 0;
+        const price = parseFloat(ticker.lastPrice) || 0;
+        const changePercent = parseFloat(ticker.price24hPcnt) * 100 || 0;
+        
+        return {
+          symbol: ticker.symbol.replace('USDT', '-USDT'),
+          volume: volume24h,
+          price: price,
+          change24h: changePercent,
+          high24h: parseFloat(ticker.highPrice24h),
+          low24h: parseFloat(ticker.lowPrice24h),
+          timestamp: new Date().toISOString()
+        };
+      });
+
+      // Sort by volume and return top coins
+      return volumeData
+        .sort((a, b) => b.volume - a.volume)
+        .slice(0, limit);
+    } catch (error) {
+      logger.error('Error fetching Bybit volume data:', error);
+      throw error;
+    }
   }
 
   // 指値ロングポジション建て
@@ -202,6 +277,37 @@ export class BybitClient {
 
   // REST API共通処理
   private async makeRestRequest(method: string, endpoint: string, params: any): Promise<any> {
+    // For public endpoints (no authentication required)
+    if (!this.apiKey || !this.apiSecret) {
+      const queryString = method === 'GET' && params
+        ? '?' + Object.keys(params)
+            .map(key => `${key}=${encodeURIComponent(params[key])}`)
+            .join('&')
+        : '';
+      
+      const url = `${this.baseURL}${endpoint}${queryString}`;
+      
+      try {
+        const response = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        const data = await response.json() as any;
+        
+        if (data.retCode !== 0) {
+          throw new Error(`Bybit API Error [${data.retCode}]: ${data.retMsg}`);
+        }
+        
+        return data;
+      } catch (error) {
+        logger.error(`Bybit API request failed: ${method} ${endpoint}`, error);
+        throw error;
+      }
+    }
+
+    // For private endpoints (authentication required)
     const timestamp = Date.now().toString();
     const recvWindow = '5000';
     

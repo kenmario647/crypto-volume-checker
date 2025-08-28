@@ -33,7 +33,7 @@ export class MomentumService {
 
   private async getBinanceMomentum(): Promise<MomentumData[]> {
     try {
-      const topVolume = await this.binanceClient.getTopVolumeSymbols(20);
+      const topVolume = await this.binanceClient.getTopVolumeSymbols(15);
       
       return topVolume.map((ticker, index) => ({
         symbol: ticker.symbol.replace('USDT', ''),

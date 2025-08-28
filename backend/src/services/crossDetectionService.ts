@@ -3,20 +3,23 @@ import { logger } from '../utils/logger';
 
 export interface CrossEvent {
   symbol: string;
-  exchange: 'binance' | 'upbit';
-  type: 'golden_cross' | 'death_cross';
+  exchange: 'binance' | 'binance-spot' | 'upbit';
+  type: 'ma2_ma5_golden_cross' | 'ma2_ma5_death_cross';
   timestamp: number;
-  ma3Value: number;
-  ma8Value: number;
-  previousMa3: number;
-  previousMa8: number;
+  ma2Value: number;
+  ma5Value: number;
+  ma10Value: number;
+  previousMa2: number;
+  previousMa5: number;
+  previousMa10: number;
 }
 
 export interface VolumeDataPoint {
   timestamp: number;
   volume: number;
-  ma3?: number | null;
-  ma8?: number | null;
+  ma2?: number | null;
+  ma5?: number | null;
+  ma10?: number | null;
 }
 
 export class CrossDetectionService extends EventEmitter {
@@ -33,7 +36,7 @@ export class CrossDetectionService extends EventEmitter {
    * @param exchange 取引所
    * @param volumeData 出来高データ配列
    */
-  detectCross(symbol: string, exchange: 'binance' | 'upbit', volumeData: VolumeDataPoint[]): void {
+  detectCross(symbol: string, exchange: 'binance' | 'binance-spot' | 'upbit', volumeData: VolumeDataPoint[]): void {
     const key = `${exchange}:${symbol}`;
     const previousVolData = this.previousData.get(key) || [];
 
@@ -50,52 +53,58 @@ export class CrossDetectionService extends EventEmitter {
     const currentData = volumeData[volumeData.length - 1];
     const previousData = volumeData[volumeData.length - 2];
 
-    logger.info(`[CROSS_DETECTION] ${key}: Current MA data - MA3: ${currentData.ma3}, MA8: ${currentData.ma8}`);
-    logger.info(`[CROSS_DETECTION] ${key}: Previous MA data - MA3: ${previousData.ma3}, MA8: ${previousData.ma8}`);
+    logger.info(`[CROSS_DETECTION] ${key}: Current MA data - MA2: ${currentData.ma2}, MA5: ${currentData.ma5}, MA10: ${currentData.ma10}`);
+    logger.info(`[CROSS_DETECTION] ${key}: Previous MA data - MA2: ${previousData.ma2}, MA5: ${previousData.ma5}, MA10: ${previousData.ma10}`);
 
-    // MA3とMA8が両方とも計算されているかチェック
+    // MA2、MA5、MA10が全て計算されているかチェック
     if (!this.hasValidMA(currentData) || !this.hasValidMA(previousData)) {
       logger.info(`[CROSS_DETECTION] ${key}: Invalid MA data, skipping cross detection`);
       this.previousData.set(key, volumeData);
       return;
     }
 
-    const currentMa3 = currentData.ma3!;
-    const currentMa8 = currentData.ma8!;
-    const prevMa3 = previousData.ma3!;
-    const prevMa8 = previousData.ma8!;
+    const currentMa2 = currentData.ma2!;
+    const currentMa5 = currentData.ma5!;
+    const currentMa10 = currentData.ma10!;
+    const prevMa2 = previousData.ma2!;
+    const prevMa5 = previousData.ma5!;
+    const prevMa10 = previousData.ma10!;
 
-    // ゴールデンクロス検知: MA3がMA8より下にあった状態から上に抜けた
-    if (prevMa3 <= prevMa8 && currentMa3 > currentMa8) {
+    // MA2 vs MA5 ゴールデンクロス検知
+    if (prevMa2 <= prevMa5 && currentMa2 > currentMa5) {
       const crossEvent: CrossEvent = {
         symbol,
         exchange,
-        type: 'golden_cross',
+        type: 'ma2_ma5_golden_cross',
         timestamp: currentData.timestamp,
-        ma3Value: currentMa3,
-        ma8Value: currentMa8,
-        previousMa3: prevMa3,
-        previousMa8: prevMa8
+        ma2Value: currentMa2,
+        ma5Value: currentMa5,
+        ma10Value: currentMa10,
+        previousMa2: prevMa2,
+        previousMa5: prevMa5,
+        previousMa10: prevMa10
       };
 
-      logger.info(`🟡 GOLDEN CROSS detected: ${symbol} (${exchange}) - MA3: ${currentMa3.toFixed(2)} > MA8: ${currentMa8.toFixed(2)}`);
+      logger.info(`🟡 MA2/MA5 GOLDEN CROSS detected: ${symbol} (${exchange}) - MA2: ${currentMa2.toFixed(2)} > MA5: ${currentMa5.toFixed(2)}`);
       this.emit('goldenCross', crossEvent);
     }
 
-    // デスクロス検知: MA3がMA8より上にあった状態から下に抜けた
-    if (prevMa3 >= prevMa8 && currentMa3 < currentMa8) {
+    // MA2 vs MA5 デスクロス検知
+    if (prevMa2 >= prevMa5 && currentMa2 < currentMa5) {
       const crossEvent: CrossEvent = {
         symbol,
         exchange,
-        type: 'death_cross',
+        type: 'ma2_ma5_death_cross',
         timestamp: currentData.timestamp,
-        ma3Value: currentMa3,
-        ma8Value: currentMa8,
-        previousMa3: prevMa3,
-        previousMa8: prevMa8
+        ma2Value: currentMa2,
+        ma5Value: currentMa5,
+        ma10Value: currentMa10,
+        previousMa2: prevMa2,
+        previousMa5: prevMa5,
+        previousMa10: prevMa10
       };
 
-      logger.info(`🔴 DEATH CROSS detected: ${symbol} (${exchange}) - MA3: ${currentMa3.toFixed(2)} < MA8: ${currentMa8.toFixed(2)}`);
+      logger.info(`🔴 MA2/MA5 DEATH CROSS detected: ${symbol} (${exchange}) - MA2: ${currentMa2.toFixed(2)} < MA5: ${currentMa5.toFixed(2)}`);
       this.emit('deathCross', crossEvent);
     }
 
@@ -104,18 +113,18 @@ export class CrossDetectionService extends EventEmitter {
   }
 
   /**
-   * MA3とMA8が有効な値かチェック
+   * MA2、MA5が有効な値かチェック（MA10は任意）
    */
   private hasValidMA(data: VolumeDataPoint): boolean {
-    return data.ma3 !== null && data.ma3 !== undefined && 
-           data.ma8 !== null && data.ma8 !== undefined &&
-           !isNaN(data.ma3) && !isNaN(data.ma8);
+    return data.ma2 !== null && data.ma2 !== undefined && 
+           data.ma5 !== null && data.ma5 !== undefined &&
+           !isNaN(data.ma2) && !isNaN(data.ma5);
   }
 
   /**
    * 特定の銘柄・取引所の履歴をクリア
    */
-  clearHistory(symbol?: string, exchange?: 'binance' | 'upbit'): void {
+  clearHistory(symbol?: string, exchange?: 'binance' | 'binance-spot' | 'upbit'): void {
     if (symbol && exchange) {
       const key = `${exchange}:${symbol}`;
       this.previousData.delete(key);

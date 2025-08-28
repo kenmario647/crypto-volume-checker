@@ -75,7 +75,7 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
       
       // API endpoint for volume chart data
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/volume/symbol/${exchange}/${symbol}?interval=5m&limit=36`
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/volume/symbol/${exchange}/${symbol}?interval=5m&limit=48`
       );
       
       if (response.ok) {
@@ -96,16 +96,25 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
                 low: 0,
                 open: 0,
                 close: 0,
-                ma3: item.ma3,
-                ma8: item.ma8,
-                ma15: item.ma15,
+                ma2: item.ma2,
+                ma5: item.ma5,
+                ma10: item.ma10,
                 current24hVolume: result.data.current24hVolume
               };
             });
-            console.log('Transformed chart data:', transformedData.slice(0, 3));
-            setChartData(transformedData);
+            // 最新の48本のみを保持（古いデータから新しいデータの順にソート後、最新48本を取得）
+            const sortedData = transformedData.sort((a: any, b: any) => 
+              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+            );
+            const latestData = sortedData.slice(-48);
+            console.log('Transformed chart data (48 bars):', latestData.length, 'bars');
+            setChartData(latestData);
           } else if (Array.isArray(result.data)) {
-            setChartData(result.data);
+            // データを48本に制限
+            const sortedData = result.data.sort((a: any, b: any) => 
+              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+            );
+            setChartData(sortedData.slice(-48));
           } else {
             console.log('Invalid data format from API, using sample data');
             generateSampleData();
@@ -147,8 +156,8 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
       default: baseVolume = 300000000; // 300M for others
     }
     
-    // Generate 36 data points (3 hours of 5min intervals)
-    for (let i = 35; i >= 0; i--) {
+    // Generate 48 data points (4 hours of 5min intervals)
+    for (let i = 47; i >= 0; i--) {
       const timestamp = new Date(now.getTime() - (i * 5 * 60 * 1000)); // 5分間隔
       // 5分間の出来高は24時間の約1/288 (24*60/5 = 288)
       const fiveMinVolume = (baseVolume / 288) * (0.5 + Math.random()); // ±50%のランダム変動
@@ -185,9 +194,9 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
   const volumeData = Array.isArray(chartData) ? chartData.map(item => item.quoteVolume) : [];
   
   // Extract moving average data
-  const ma3Data = Array.isArray(chartData) ? chartData.map((item: any) => item.ma3) : [];
-  const ma8Data = Array.isArray(chartData) ? chartData.map((item: any) => item.ma8) : [];
-  const ma15Data = Array.isArray(chartData) ? chartData.map((item: any) => item.ma15) : [];
+  const ma2Data = Array.isArray(chartData) ? chartData.map((item: any) => item.ma2) : [];
+  const ma5Data = Array.isArray(chartData) ? chartData.map((item: any) => item.ma5) : [];
+  const ma10Data = Array.isArray(chartData) ? chartData.map((item: any) => item.ma10) : [];
 
   const coloredBars = volumeData.map((volume, index) => {
     if (index === 0) return 'rgba(52, 152, 219, 0.6)'; // Default blue for first bar
@@ -212,9 +221,9 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
   // Calculate dynamic min/max including moving averages for better visualization
   const allNumericData = [
     ...volumeData.filter(v => v !== null && v !== undefined && !isNaN(v)),
-    ...ma3Data.filter(v => v !== null && v !== undefined && !isNaN(v)),
-    ...ma8Data.filter(v => v !== null && v !== undefined && !isNaN(v)),
-    ...ma15Data.filter(v => v !== null && v !== undefined && !isNaN(v))
+    ...ma2Data.filter(v => v !== null && v !== undefined && !isNaN(v)),
+    ...ma5Data.filter(v => v !== null && v !== undefined && !isNaN(v)),
+    ...ma10Data.filter(v => v !== null && v !== undefined && !isNaN(v))
   ];
   const validData = allNumericData;
   const minValue = validData.length > 0 ? Math.min(...validData) : 0;
@@ -350,8 +359,8 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
         order: 3, // Display bars behind lines
       },
       {
-        label: 'MA3',
-        data: ma3Data,
+        label: 'MA2',
+        data: ma2Data,
         borderColor: '#e74c3c',
         backgroundColor: 'transparent',
         borderWidth: 2,
@@ -360,10 +369,12 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
         type: 'line',
         tension: 0.4,
         order: 1,
+        spanGaps: true, // null値をスキップして線を繋ぐ
+        skipNull: true, // null値をスキップ
       },
       {
-        label: 'MA8',
-        data: ma8Data,
+        label: 'MA5',
+        data: ma5Data,
         borderColor: '#f39c12',
         backgroundColor: 'transparent',
         borderWidth: 2,
@@ -372,10 +383,12 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
         type: 'line',
         tension: 0.4,
         order: 1,
+        spanGaps: true, // null値をスキップして線を繋ぐ
+        skipNull: true, // null値をスキップ
       },
       {
-        label: 'MA15',
-        data: ma15Data,
+        label: 'MA10',
+        data: ma10Data,
         borderColor: '#2ecc71',
         backgroundColor: 'transparent',
         borderWidth: 2,
@@ -384,6 +397,8 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
         type: 'line',
         tension: 0.4,
         order: 1,
+        spanGaps: true, // null値をスキップして線を繋ぐ
+        skipNull: true, // null値をスキップ
       },
     ],
   };
@@ -409,7 +424,7 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
           </Typography>
           <Box sx={{ textAlign: 'right' }}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              5分足 × 36本 (3時間)
+              5分足 × 48本 (4時間)
             </Typography>
             {chartData.length > 0 && (
               <Typography variant="caption" sx={{ color: '#4ecdc4' }}>

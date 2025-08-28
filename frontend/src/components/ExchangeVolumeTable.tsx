@@ -15,6 +15,8 @@ import {
   Switch,
   FormControlLabel,
   Tooltip,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import { TrendingUp, TrendingDown, ShowChart, Star } from '@mui/icons-material';
 import io from 'socket.io-client';
@@ -29,7 +31,8 @@ interface VolumeRankingData {
   lastPrice: string;
   rank: number;
   previousRank?: number;
-  exchange: 'binance' | 'upbit';
+  initialRank?: number;
+  exchange: 'binance' | 'binance-spot' | 'upbit' | 'bybit' | 'okx' | 'gateio' | 'bitget' | 'coinbase';
   rankChanged?: boolean;
   volumeSpike?: boolean;
   newRankIn?: boolean;
@@ -37,28 +40,68 @@ interface VolumeRankingData {
 }
 
 interface ExchangeVolumeTableProps {
-  exchange: 'binance' | 'upbit';
+  exchange: 'binance' | 'binance-spot' | 'upbit' | 'bybit' | 'okx' | 'gateio' | 'bitget' | 'coinbase';
 }
 
 const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) => {
   const [exchangeData, setExchangeData] = useState<VolumeRankingData[]>([]);
+  const [initialRankMap, setInitialRankMap] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<string>('');
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [selectedSymbol, setSelectedSymbol] = useState<{ symbol: string; exchange: string } | null>(null);
+  const [marketType, setMarketType] = useState<'SPOT' | 'PERP'>('PERP');
+  const [spotPerpData, setSpotPerpData] = useState<any[]>([]);
+
+  // Determine if exchange supports SPOT/PERP
+  const supportsSPOTPERP = ['binance', 'bybit', 'okx', 'gateio', 'bitget'].includes(exchange);
+  
+  // For Upbit and Coinbase, always show SPOT
+  const effectiveMarketType = supportsSPOTPERP ? marketType : 'SPOT';
 
   useEffect(() => {
     // Initial data fetch
-    fetchRankings();
+    if (supportsSPOTPERP) {
+      fetchSpotPerpRankings();
+    } else {
+      fetchRankings();
+    }
+  }, [exchange, marketType]);
 
+  useEffect(() => {
     // Setup WebSocket connection for real-time updates
     const socket = io(process.env.REACT_APP_API_URL || 'http://localhost:5000');
 
     socket.on('volume-ranking-update', (data: any) => {
       if (autoUpdate) {
         if ((data.type === 'binance-ranking' && exchange === 'binance') || 
-            (data.type === 'upbit-ranking' && exchange === 'upbit')) {
-          setExchangeData(data.data.slice(0, 20));
+            (data.type === 'binance-spot-ranking' && exchange === 'binance-spot') ||
+            (data.type === 'upbit-ranking' && exchange === 'upbit') ||
+            (data.type === 'bybit-ranking' && exchange === 'bybit') ||
+            (data.type === 'okx-ranking' && exchange === 'okx') ||
+            (data.type === 'gateio-ranking' && exchange === 'gateio') ||
+            (data.type === 'bitget-ranking' && exchange === 'bitget') ||
+            (data.type === 'coinbase-ranking' && exchange === 'coinbase')) {
+          
+          // Debug logging for WebSocket data
+          console.log(`[DEBUG] WebSocket ${data.type} received:`, {
+            totalLength: data.data ? data.data.length : 0,
+            symbols: data.data ? data.data.slice(0, 20).map((item: any) => item.symbol) : [],
+            slicedLength: data.data ? data.data.slice(0, 15).length : 0
+          });
+          
+          // Preserve initialRank from the stored map
+          const updatedData = data.data.slice(0, 15).map((item: any) => {
+            const key = item.symbol;
+            const storedInitialRank = initialRankMap.get(key);
+            const finalInitialRank = item.initialRank || storedInitialRank || item.rank;
+            console.log(`[DEBUG] ${key}: initialRank from API=${item.initialRank}, stored=${storedInitialRank}, final=${finalInitialRank}`);
+            return {
+              ...item,
+              initialRank: finalInitialRank
+            };
+          });
+          setExchangeData(updatedData);
           setLastUpdate(new Date(data.timestamp).toLocaleTimeString());
           setLoading(false);
         }
@@ -69,23 +112,96 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
     return () => {
       socket.disconnect();
     };
-  }, [autoUpdate, exchange]);
+  }, [autoUpdate, exchange, initialRankMap]);
 
-  const fetchRankings = async () => {
+  const fetchSpotPerpRankings = async () => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/volume-ranking/top20`);
+      setLoading(true);
+      const endpoint = effectiveMarketType === 'SPOT' ? 'spot' : 'perp';
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/spot-perp-volume/${endpoint}?exchange=${exchange}&limit=15`
+      );
       const result = await response.json();
       
       if (result.success) {
-        const data = exchange === 'binance' ? result.data.binance : result.data.upbit;
+        setSpotPerpData(result.data.slice(0, 15));
+        setLastUpdate(new Date().toLocaleTimeString());
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching SPOT/PERP rankings:', error);
+      setLoading(false);
+      // Fall back to regular rankings
+      fetchRankings();
+    }
+  };
+
+  const fetchRankings = async () => {
+    try {
+      let endpoint = '/api/volume-ranking/';
+      
+      // Determine endpoint based on exchange
+      switch (exchange) {
+        case 'binance':
+          endpoint += 'binance';
+          break;
+        case 'binance-spot':
+          endpoint += 'binance-spot';
+          break;
+        case 'upbit':
+          endpoint += 'upbit';
+          break;
+        case 'bybit':
+          endpoint += 'bybit';
+          break;
+        case 'okx':
+          endpoint += 'okx';
+          break;
+        case 'gateio':
+          endpoint += 'gateio';
+          break;
+        case 'bitget':
+          endpoint += 'bitget';
+          break;
+        case 'coinbase':
+          endpoint += 'coinbase';
+          break;
+        default:
+          endpoint = '/api/volume-ranking/binance'; // Use binance as default instead of top20
+      }
+      
+      const fullUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${endpoint}`;
+      console.log(`[DEBUG] Fetching from: ${fullUrl} for exchange: ${exchange}`);
+      
+      const response = await fetch(fullUrl);
+      const result = await response.json();
+      
+      if (result.success) {
+        const data = result.data.rankings || result.data;
+        
+        // Debug logging
+        console.log(`[DEBUG] ${exchange} API response:`, {
+          totalLength: data ? data.length : 0,
+          symbols: data ? data.slice(0, 20).map((item: any) => item.symbol) : [],
+          slicedLength: data ? data.slice(0, 15).length : 0
+        });
         
         // If Binance data is empty but other exchange has data, show message
-        if (exchange === 'binance' && (!data || data.length === 0) && result.data.upbit && result.data.upbit.length > 0) {
+        if (exchange === 'binance' && (!data || data.length === 0)) {
           console.log('Binance data is still loading, please wait...');
         }
         
-        setExchangeData(data ? data.slice(0, 20) : []);
-        setLastUpdate(new Date(result.data.updateTime).toLocaleTimeString());
+        const rankings = data ? data.slice(0, 15) : [];
+        
+        // Store initial ranks for future WebSocket updates
+        const newInitialRankMap = new Map<string, number>();
+        rankings.forEach((item: VolumeRankingData) => {
+          newInitialRankMap.set(item.symbol, item.initialRank || item.rank);
+        });
+        setInitialRankMap(newInitialRankMap);
+        
+        setExchangeData(rankings);
+        setLastUpdate(new Date().toLocaleTimeString());
       }
       setLoading(false);
     } catch (error) {
@@ -111,11 +227,6 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
       { symbol: 'LTC', volume: '11890', quoteVolume: '487.0M', volume24h: '487.0M', priceChangePercent: '2.87', lastPrice: '108.76', rank: 13, exchange: 'binance' },
       { symbol: 'BCH', volume: '10987', quoteVolume: '432.0M', volume24h: '432.0M', priceChangePercent: '1.23', lastPrice: '486.78', rank: 14, exchange: 'binance' },
       { symbol: 'NEAR', volume: '10234', quoteVolume: '398.0M', volume24h: '398.0M', priceChangePercent: '-0.65', lastPrice: '7.45', rank: 15, exchange: 'binance' },
-      { symbol: 'MATIC', volume: '9567', quoteVolume: '367.0M', volume24h: '367.0M', priceChangePercent: '4.56', lastPrice: '0.634', rank: 16, exchange: 'binance' },
-      { symbol: 'DOT', volume: '8976', quoteVolume: '334.0M', volume24h: '334.0M', priceChangePercent: '2.34', lastPrice: '8.456', rank: 17, exchange: 'binance' },
-      { symbol: 'ARB', volume: '8456', quoteVolume: '312.0M', volume24h: '312.0M', priceChangePercent: '-1.78', lastPrice: '0.889', rank: 18, exchange: 'binance' },
-      { symbol: 'ATOM', volume: '7890', quoteVolume: '289.0M', volume24h: '289.0M', priceChangePercent: '3.45', lastPrice: '6.123', rank: 19, exchange: 'binance' },
-      { symbol: 'FTM', volume: '7345', quoteVolume: '267.0M', volume24h: '267.0M', priceChangePercent: '0.87', lastPrice: '1.567', rank: 20, exchange: 'binance' }
     ];
 
     const upbitSampleData: VolumeRankingData[] = [
@@ -133,12 +244,7 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
       { symbol: 'LTC', volume: '1098', quoteVolume: '58000.0M', volume24h: '58000.0M', priceChangePercent: '1.56', lastPrice: '145600', rank: 12, exchange: 'upbit' },
       { symbol: 'BCH', volume: '987', quoteVolume: '52000.0M', volume24h: '52000.0M', priceChangePercent: '-0.89', lastPrice: '673400', rank: 13, exchange: 'upbit' },
       { symbol: 'ATOM', volume: '876', quoteVolume: '46000.0M', volume24h: '46000.0M', priceChangePercent: '3.34', lastPrice: '18345', rank: 14, exchange: 'upbit' },
-      { symbol: 'ALGO', volume: '789', quoteVolume: '41000.0M', volume24h: '41000.0M', priceChangePercent: '2.12', lastPrice: '345', rank: 15, exchange: 'upbit' },
-      { symbol: 'VET', volume: '698', quoteVolume: '37000.0M', volume24h: '37000.0M', priceChangePercent: '-1.67', lastPrice: '67', rank: 16, exchange: 'upbit' },
-      { symbol: 'FTM', volume: '634', quoteVolume: '33000.0M', volume24h: '33000.0M', priceChangePercent: '4.89', lastPrice: '1165', rank: 17, exchange: 'upbit' },
-      { symbol: 'HBAR', volume: '567', quoteVolume: '29000.0M', volume24h: '29000.0M', priceChangePercent: '1.78', lastPrice: '182', rank: 18, exchange: 'upbit' },
-      { symbol: 'NEAR', volume: '523', quoteVolume: '26000.0M', volume24h: '26000.0M', priceChangePercent: '-0.45', lastPrice: '6734', rank: 19, exchange: 'upbit' },
-      { symbol: 'ICP', volume: '487', quoteVolume: '23000.0M', volume24h: '23000.0M', priceChangePercent: '2.89', lastPrice: '12456', rank: 20, exchange: 'upbit' }
+      { symbol: 'ALGO', volume: '789', quoteVolume: '41000.0M', volume24h: '41000.0M', priceChangePercent: '2.12', lastPrice: '345', rank: 15, exchange: 'upbit' }
     ];
 
     const sampleData = exchange === 'binance' ? binanceSampleData : upbitSampleData;
@@ -151,7 +257,13 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
   const getExchangeColor = (exchange: string) => {
     switch (exchange) {
       case 'binance': return '#F3BA2F';
+      case 'binance-spot': return '#4CAF50';
       case 'upbit': return '#004FFF';
+      case 'bybit': return '#FF6B00';
+      case 'okx': return '#000000';
+      case 'gateio': return '#E6001E';
+      case 'bitget': return '#00D4FF';
+      case 'coinbase': return '#1E52E4';
       default: return '#666';
     }
   };
@@ -159,7 +271,13 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
   const getExchangeName = (exchange: string) => {
     switch (exchange) {
       case 'binance': return 'Binance';
+      case 'binance-spot': return 'Binance SPOT';
       case 'upbit': return 'Upbit';
+      case 'bybit': return 'Bybit';
+      case 'okx': return 'OKX';
+      case 'gateio': return 'Gate.io';
+      case 'bitget': return 'Bitget';
+      case 'coinbase': return 'Coinbase';
       default: return exchange;
     }
   };
@@ -174,6 +292,65 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
   const getPriceChangeColor = (changePercent: string) => {
     const value = parseFloat(changePercent.replace('%', ''));
     return value >= 0 ? '#00e676' : '#ff1744';
+  };
+
+  const getRankChangeDisplay = (row: VolumeRankingData) => {
+    // 新規ランクイン（21位以下から15位以内へ）
+    if (row.newRankIn) {
+      return (
+        <Chip
+          label="NEW"
+          size="small"
+          sx={{
+            backgroundColor: '#ffd700',
+            color: 'black',
+            fontWeight: 'bold',
+            fontSize: '10px',
+            height: '18px',
+            ml: 0.5
+          }}
+        />
+      );
+    }
+    
+    // 前回の順位がある場合
+    if (row.previousRank !== undefined && row.previousRank !== null) {
+      const rankDiff = row.previousRank - row.rank;
+      
+      // 順位変動なし
+      if (rankDiff === 0) {
+        return (
+          <Typography variant="caption" sx={{ color: '#666', ml: 1, fontSize: '11px' }}>
+            ー
+          </Typography>
+        );
+      }
+      
+      // 順位上昇
+      if (rankDiff > 0) {
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5 }}>
+            <TrendingUp sx={{ color: '#00e676', fontSize: 14 }} />
+            <Typography variant="caption" sx={{ color: '#00e676', fontWeight: 'bold', fontSize: '11px' }}>
+              +{rankDiff}
+            </Typography>
+          </Box>
+        );
+      }
+      
+      // 順位下降
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5 }}>
+          <TrendingDown sx={{ color: '#ff1744', fontSize: 14 }} />
+          <Typography variant="caption" sx={{ color: '#ff1744', fontWeight: 'bold', fontSize: '11px' }}>
+            {rankDiff}
+          </Typography>
+        </Box>
+      );
+    }
+    
+    // データがない場合（初回表示など）
+    return null;
   };
 
   const formatVolumeToMillion = (volumeString: string) => {
@@ -211,34 +388,75 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
     let formattedSymbol = symbol;
     
     // Binanceの場合、USDTペアに変換
-    if (exchange === 'binance' && !symbol.endsWith('USDT')) {
+    if ((exchange === 'binance' || exchange === 'binance-spot') && !symbol.endsWith('USDT')) {
       formattedSymbol = `${symbol}USDT`;
     }
     
     setSelectedSymbol({ symbol: formattedSymbol, exchange });
   };
 
-  const renderTable = (data: VolumeRankingData[], exchange: 'binance' | 'upbit') => (
-    <Paper sx={{ backgroundColor: 'background.paper', border: '1px solid #333', height: '100%' }}>
-      <Box sx={{ p: 2, borderBottom: '1px solid #333', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-        <Chip
-          label={exchange === 'binance' ? 'Binance (PERP)' : getExchangeName(exchange)}
-          sx={{
-            backgroundColor: getExchangeColor(exchange),
-            color: 'white',
-            fontWeight: 'bold',
-            fontSize: '16px',
-            px: 2
-          }}
-        />
+  const handleMarketTypeChange = (event: React.MouseEvent<HTMLElement>, newMarketType: 'SPOT' | 'PERP' | null) => {
+    if (newMarketType !== null) {
+      setMarketType(newMarketType);
+    }
+  };
+
+  const renderTable = (data: any[], exchange: 'binance' | 'binance-spot' | 'upbit' | 'bybit' | 'okx' | 'gateio' | 'bitget' | 'coinbase') => (
+    <Paper sx={{ backgroundColor: 'background.paper', border: '1px solid #333' }}>
+      <Box sx={{ p: 0.5, borderBottom: '1px solid #333', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <Chip
+            label={getExchangeName(exchange)}
+            sx={{
+              backgroundColor: getExchangeColor(exchange),
+              color: 'white',
+              fontWeight: 'bold',
+              fontSize: '12px',
+              px: 1
+            }}
+          />
+        </Box>
+        {supportsSPOTPERP && (
+          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+            <ToggleButtonGroup
+              value={marketType}
+              exclusive
+              onChange={handleMarketTypeChange}
+              size="small"
+              sx={{
+                '& .MuiToggleButton-root': {
+                  color: 'white',
+                  borderColor: '#333',
+                  '&.Mui-selected': {
+                    backgroundColor: 'primary.main',
+                    color: 'black',
+                    '&:hover': {
+                      backgroundColor: 'primary.dark',
+                    },
+                  },
+                },
+              }}
+            >
+              <ToggleButton value="SPOT">
+                SPOT
+              </ToggleButton>
+              <ToggleButton value="PERP">
+                PERP
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
+        )}
       </Box>
 
-      <TableContainer sx={{ maxHeight: 600 }}>
+      <TableContainer>
         <Table stickyHeader size="small">
           <TableHead>
             <TableRow>
               <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold' }}>
                 ランク
+              </TableCell>
+              <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold' }}>
+                起動時順位
               </TableCell>
               <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold' }}>
                 シンボル
@@ -250,7 +468,7 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
                 価格
               </TableCell>
               <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold' }} align="right">
-                変動率
+                出来高変動
               </TableCell>
             </TableRow>
           </TableHead>
@@ -263,13 +481,27 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
                 onClick={() => handleSymbolClick(row.symbol, row.exchange)}
               >
                 <TableCell>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Chip
+                      label={`#${row.rank}`}
+                      size="small"
+                      sx={{
+                        backgroundColor: row.rank <= 3 ? '#FFD700' : 'primary.main',
+                        color: row.rank <= 3 ? 'black' : 'white',
+                        fontWeight: 'bold',
+                      }}
+                    />
+                    {getRankChangeDisplay(row)}
+                  </Box>
+                </TableCell>
+                <TableCell>
                   <Chip
-                    label={`#${row.rank}`}
+                    label={row.initialRank ? `#${row.initialRank}` : '-'}
                     size="small"
                     sx={{
-                      backgroundColor: row.rank <= 3 ? '#FFD700' : 'primary.main',
-                      color: row.rank <= 3 ? 'black' : 'white',
-                      fontWeight: 'bold',
+                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                      color: 'rgba(255, 255, 255, 0.7)',
+                      fontSize: '0.75rem'
                     }}
                   />
                 </TableCell>
@@ -286,20 +518,6 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
                       >
                         {row.symbol.charAt(0)}
                       </Avatar>
-                      {/* Rank Change Indicator */}
-                      {row.rankChanged && (
-                        <Box
-                          sx={{
-                            position: 'absolute',
-                            top: -4,
-                            right: -4,
-                            backgroundColor: '#ff9800',
-                            borderRadius: '50%',
-                            width: 8,
-                            height: 8,
-                          }}
-                        />
-                      )}
                     </Box>
                     <Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -333,19 +551,7 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
                             <TrendingUp sx={{ color: '#00e676', fontSize: 14 }} />
                           </Tooltip>
                         )}
-                        {/* New Rank In Indicator */}
-                        {row.newRankIn && (
-                          <Tooltip title="21位以下からランクイン">
-                            <Star sx={{ color: '#ffd700', fontSize: 14 }} />
-                          </Tooltip>
-                        )}
                       </Box>
-                      {/* Previous Rank Info */}
-                      {row.rankChanged && row.previousRank && (
-                        <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '10px' }}>
-                          前回: #{row.previousRank}
-                        </Typography>
-                      )}
                     </Box>
                   </Box>
                 </TableCell>
@@ -410,9 +616,9 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
 
   return (
     <Box>
-      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ mb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box>
-          <Typography variant="h6" sx={{ color: 'white', fontWeight: 'bold' }}>
+          <Typography variant="body1" sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.95rem' }}>
             🏆 24時間出来高ランキング
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
@@ -436,7 +642,7 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
         />
       </Box>
 
-      {renderTable(exchangeData, exchange)}
+      {renderTable(supportsSPOTPERP ? spotPerpData.slice(0, 15) : exchangeData, exchange)}
 
       {selectedSymbol && (
         <VolumeDetailChart

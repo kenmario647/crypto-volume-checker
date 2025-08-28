@@ -2,14 +2,26 @@ import { ExchangeData } from '../types';
 import { logger } from '../utils/logger';
 import { BinanceClient } from './binanceClient';
 import { UpbitClient } from './upbitClient';
+import { BybitClient } from './bybitClient';
+import { OKXClient } from './okxClient';
+import { GateIOClient } from './gateioClient';
+import { BitgetClient } from './bitgetClient';
 
 export class ExchangeService {
   private binanceClient: BinanceClient;
   private upbitClient: UpbitClient;
+  private bybitClient: BybitClient;
+  private okxClient: OKXClient;
+  private gateioClient: GateIOClient;
+  private bitgetClient: BitgetClient;
 
   constructor() {
     this.binanceClient = new BinanceClient();
     this.upbitClient = new UpbitClient();
+    this.bybitClient = BybitClient.getInstance();
+    this.okxClient = OKXClient.getInstance();
+    this.gateioClient = GateIOClient.getInstance();
+    this.bitgetClient = BitgetClient.getInstance();
   }
 
   async getAllExchangeData(): Promise<ExchangeData[]> {
@@ -33,7 +45,7 @@ export class ExchangeService {
   private async getBinanceExchangeData(): Promise<ExchangeData> {
     try {
       const [topVolume, exchangeInfo] = await Promise.all([
-        this.binanceClient.getTopVolumeSymbols(50),
+        this.binanceClient.getTopVolumeSymbols(15),
         // this.binanceClient.getSystemStatus(), // Disabled due to 404 API issue
         this.binanceClient.getExchangeInfo()
       ]);
@@ -84,15 +96,6 @@ export class ExchangeService {
   private getMockExchangeData(): ExchangeData[] {
     try {
       const mockData: ExchangeData[] = [
-        {
-          name: 'Coinbase',
-          volume24h: 6700000000,
-          volumeUsd: 6700000000,
-          marketShare: 19.3,
-          status: 'online',
-          lastUpdate: new Date(),
-          pairs: 423
-        },
         {
           name: 'OKX',
           volume24h: 4200000000,

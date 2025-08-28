@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import { EventEmitter } from 'events';
+import { ExchangeRateService } from './exchangeRateService';
 
 export interface UpbitVolumeData {
   symbol: string;
@@ -23,9 +24,11 @@ export class UpbitRestApiService extends EventEmitter {
   private previousVolumes: Map<string, number> = new Map();
   private updateInterval: NodeJS.Timeout | null = null;
   private markets: string[] = [];
+  private exchangeRateService: ExchangeRateService;
 
   constructor() {
     super();
+    this.exchangeRateService = ExchangeRateService.getInstance();
     this.initializeMarkets();
   }
 
@@ -51,7 +54,7 @@ export class UpbitRestApiService extends EventEmitter {
     // Initial fetch
     this.fetchVolumeData();
     
-    // Fetch every 5 minutes
+    // Fetch every 5 minutes (aligned with other exchanges)
     this.updateInterval = setInterval(() => {
       this.fetchVolumeData();
     }, 5 * 60 * 1000); // 5 minutes
@@ -109,19 +112,19 @@ export class UpbitRestApiService extends EventEmitter {
       }))
       .sort((a, b) => b.quoteVolume - a.quoteVolume);
 
-    // Process top 30 to detect rank-ins from 21+
-    const top30 = allProcessed.slice(0, 30);
+    // Process ALL symbols to detect rank-ins
     const currentTime = Date.now();
     
-    const processedWithMarks = top30.map((ticker, index) => {
+    const processedWithMarks = allProcessed.map((ticker, index) => {
       const symbol = ticker.symbol;
       const currentRank = index + 1;
       const previousRank = this.previousRankings.get(symbol);
       const currentVolume = ticker.quoteVolume;
       const previousVolume = this.previousVolumes.get(symbol) || 0;
       
-      // Calculate 5-minute volume increase (convert KRW to USD: 1 USD ≈ 1300 KRW)
-      const volumeIncrease5m = (currentVolume - previousVolume) * 0.00077; // Convert to USD
+      // Calculate 5-minute volume increase using real-time exchange rate
+      const krwToUsd = this.exchangeRateService.getKrwToUsdRate();
+      const volumeIncrease5m = (currentVolume - previousVolume) * krwToUsd; // Convert to USD
       
       const item: UpbitVolumeData = {
         ...ticker,
@@ -140,17 +143,17 @@ export class UpbitRestApiService extends EventEmitter {
       return item;
     });
 
-    // Keep only top 20 for display
-    const top20 = processedWithMarks.slice(0, 20);
+    // Keep only top 15 for display
+    const top15Display = processedWithMarks.slice(0, 15);
     
     // Update volume data map
     this.volumeData.clear();
-    top20.forEach(item => {
+    top15Display.forEach(item => {
       this.volumeData.set(item.symbol, item);
     });
 
-    // Clean up old tracking data (remove symbols not in top 30)
-    const currentSymbols = new Set(top30.map(t => t.symbol));
+    // Clean up old tracking data (remove symbols not in current list)
+    const currentSymbols = new Set(allProcessed.map(t => t.symbol));
     for (const symbol of this.previousRankings.keys()) {
       if (!currentSymbols.has(symbol)) {
         this.previousRankings.delete(symbol);
@@ -158,10 +161,10 @@ export class UpbitRestApiService extends EventEmitter {
       }
     }
 
-    // Emit updated data
-    this.emit('volumeUpdate', top20);
+    // Emit ALL processed data (not just top 15)
+    this.emit('volumeUpdate', processedWithMarks);
     
-    logger.info(`Upbit volume data updated: ${top20.length} pairs`);
+    logger.info(`Upbit volume data updated: ${processedWithMarks.length} pairs (displaying top 15)`);
   }
 
   public getVolumeData(): UpbitVolumeData[] {

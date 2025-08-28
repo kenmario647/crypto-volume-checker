@@ -47,12 +47,12 @@ export class LimitPriceCalculator {
       const currentPrice = await this.bybitClient.getCurrentPrice(symbol);
       
       // 2. MA8価格（サポートライン想定）
-      const ma8Price = crossEvent.ma8Value;
+      const ma5Price = crossEvent.ma5Value;
       
       // 3. 戦略別価格計算
       const priceOptions = this.calculatePriceOptions(
         currentPrice, 
-        ma8Price, 
+        ma5Price, 
         orderBook, 
         strategy
       );
@@ -67,7 +67,7 @@ export class LimitPriceCalculator {
       const recommendation: LimitPriceRecommendation = {
         symbol,
         currentPrice,
-        ma8Price,
+        ma8Price: ma5Price,
         orderBook,
         priceOptions,
         executionProbability,
@@ -125,7 +125,7 @@ export class LimitPriceCalculator {
   ): ExecutionProbability {
     
     // ゴールデンクロス強度から上昇期待を計算
-    const crossStrength = (crossEvent.ma3Value - crossEvent.ma8Value) / crossEvent.ma8Value;
+    const crossStrength = (crossEvent.ma2Value - crossEvent.ma5Value) / crossEvent.ma5Value;
     const upwardMomentum = Math.min(0.8, crossStrength * 100); // 最大80%
     
     const probability: ExecutionProbability = {

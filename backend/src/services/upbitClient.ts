@@ -36,6 +36,7 @@ export interface UpbitMarket {
 }
 
 export class UpbitClient {
+  private static instance: UpbitClient;
   private client: AxiosInstance;
   private baseUrl = 'https://api.upbit.com/v1';
 
@@ -50,6 +51,13 @@ export class UpbitClient {
     });
 
     this.setupInterceptors();
+  }
+
+  public static getInstance(): UpbitClient {
+    if (!UpbitClient.instance) {
+      UpbitClient.instance = new UpbitClient();
+    }
+    return UpbitClient.instance;
   }
 
   private setupInterceptors() {
@@ -109,6 +117,10 @@ export class UpbitClient {
       logger.error('Error fetching Upbit KRW market tickers:', error);
       throw error;
     }
+  }
+
+  async fetchAllTickers(): Promise<UpbitTicker[]> {
+    return this.getKRWMarketTickers();
   }
 
   async getTopVolumeMarkets(limit = 10): Promise<UpbitTicker[]> {
