@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger';
 import { SpotPerpVolumeService } from './spotPerpVolumeService';
+import { ExchangeRateService } from './exchangeRateService';
 import axios from 'axios';
 
 export interface PriceDeviationData {
@@ -33,6 +34,7 @@ export class PriceDeviationService {
   private lastUpdateTime: number = 0;
   private readonly CACHE_DURATION = 10000; // 10 seconds cache
   private realTimeVolumeService: any; // Reference to RealTimeVolumeService
+  private priceHistory: Map<string, {spot: number[], perp: number[], lastUpdate: number}> = new Map(); // Track price changes
 
   private constructor() {
     this.spotPerpService = SpotPerpVolumeService.getInstance();
@@ -387,6 +389,12 @@ export class PriceDeviationService {
     // Type assertion after null check
     const spotData = bestSpot as { exchange: string; price: number; volume: number };
     const perpData = bestPerp as { exchange: string; price: number; volume: number };
+
+    // Check for stale/halted prices
+    if (this.isPriceStale(symbol, spotData.price, perpData.price)) {
+      logger.debug(`Excluding ${symbol}: Stale prices detected (no movement for extended period)`);
+      return null;
+    }
 
     const deviation = ((perpData.price - spotData.price) / spotData.price) * 100;
     
@@ -753,10 +761,14 @@ export class PriceDeviationService {
           if (ticker.instId.endsWith('-USDT')) {
             const symbol = ticker.instId.replace('-USDT', '');
             const volumeInfo = okxVolumeData.get(symbol);
-            const volume = volumeInfo ? volumeInfo.originalQuoteVolume : parseFloat(ticker.volCcy24h);
+            // OKX API returns volCcy24h as coin amount, need to multiply by price for USD volume
+            const coinVolume = parseFloat(ticker.volCcy24h || 0);
+            const price = parseFloat(ticker.last);
+            const usdVolume = coinVolume * price;
+            const volume = volumeInfo ? volumeInfo.originalQuoteVolume : usdVolume;
             if (volume > 0) {
               const existing = result.get(symbol) || { exchange: 'okx', symbol, spotPrice: undefined, spotVolume: undefined, perpPrice: undefined, perpVolume: undefined };
-              existing.spotPrice = parseFloat(ticker.last);
+              existing.spotPrice = price;
               existing.spotVolume = volume;
               result.set(symbol, existing);
             }
@@ -770,11 +782,14 @@ export class PriceDeviationService {
           if (ticker.instId.endsWith('-USDT-SWAP')) {
             const symbol = ticker.instId.replace('-USDT-SWAP', '');
             const volumeInfo = okxVolumeData.get(symbol);
-            // Use volume from cache or API - volCcy24h is in USDT for USDT perpetuals
-            const volume = volumeInfo ? volumeInfo.originalQuoteVolume : parseFloat(ticker.volCcy24h || 0);
+            // OKX API returns volCcy24h as coin amount, need to multiply by price for USD volume
+            const coinVolume = parseFloat(ticker.volCcy24h || 0);
+            const price = parseFloat(ticker.last);
+            const usdVolume = coinVolume * price;
+            const volume = volumeInfo ? volumeInfo.originalQuoteVolume : usdVolume;
             if (volume > 0) {
               const existing = result.get(symbol) || { exchange: 'okx', symbol, spotPrice: undefined, spotVolume: undefined, perpPrice: undefined, perpVolume: undefined };
-              existing.perpPrice = parseFloat(ticker.last);
+              existing.perpPrice = price;
               existing.perpVolume = volume;
               result.set(symbol, existing);
             }
@@ -970,8 +985,9 @@ export class PriceDeviationService {
       // Get volume data from RealTimeVolumeService
       const upbitVolumeData = this.realTimeVolumeService?.getAllUpbitData() || new Map();
       
-      // Use cached exchange rate
-      const krwToUsd = 1 / 1399; // Using cached rate
+      // Use actual exchange rate from ExchangeRateService
+      const exchangeRateService = ExchangeRateService.getInstance();
+      const krwToUsd = exchangeRateService.getKrwToUsdRate();
       
       tickerResponse.data.forEach((ticker: any) => {
         const symbol = ticker.market.replace('KRW-', '');
@@ -1007,8 +1023,9 @@ export class PriceDeviationService {
       // Get volume data from RealTimeVolumeService
       const bithumbVolumeData = this.realTimeVolumeService?.getAllBithumbData() || new Map();
       
-      // Use cached exchange rate
-      const krwToUsd = 1 / 1399; // Using cached rate
+      // Use actual exchange rate from ExchangeRateService
+      const exchangeRateService = ExchangeRateService.getInstance();
+      const krwToUsd = exchangeRateService.getKrwToUsdRate();
       
       if (response.data?.data) {
         Object.entries(response.data.data).forEach(([symbol, ticker]: [string, any]) => {
@@ -1036,6 +1053,66 @@ export class PriceDeviationService {
       logger.error('Error fetching Bithumb prices with volume:', error);
       return this.fetchBithumbPrices();
     }
+  }
+
+  private isPriceStale(symbol: string, currentSpot: number, currentPerp: number): boolean {
+    const now = Date.now();
+    const history = this.priceHistory.get(symbol);
+    
+    // Initialize history if not exists
+    if (!history) {
+      this.priceHistory.set(symbol, {
+        spot: [currentSpot],
+        perp: [currentPerp],
+        lastUpdate: now
+      });
+      return false;
+    }
+    
+    // Update history
+    history.spot.push(currentSpot);
+    history.perp.push(currentPerp);
+    
+    // Keep only last 10 prices (10 minutes of data)
+    if (history.spot.length > 10) {
+      history.spot.shift();
+      history.perp.shift();
+    }
+    
+    // If we have at least 5 data points, check for staleness
+    if (history.spot.length >= 5) {
+      const uniqueSpotPrices = new Set(history.spot.slice(-5));
+      const uniquePerpPrices = new Set(history.perp.slice(-5));
+      
+      // If prices haven't changed in last 5 updates, consider it stale
+      if (uniqueSpotPrices.size === 1 && uniquePerpPrices.size === 1) {
+        const deviation = ((currentPerp - currentSpot) / currentSpot) * 100;
+        logger.info(`${symbol} detected as stale: Spot=${currentSpot}, Perp=${currentPerp}, Deviation=${deviation.toFixed(2)}% (No price change for 5 updates)`);
+        return true;
+      }
+    }
+    
+    history.lastUpdate = now;
+    return false;
+  }
+
+  public getSymbolDebugData(symbol: string): any {
+    const exchanges = this.priceCache.get(symbol);
+    const deviation = this.calculateDeviation(symbol);
+    
+    return {
+      priceCache: exchanges || [],
+      calculatedDeviation: deviation,
+      availableExchanges: exchanges ? exchanges.map(e => ({
+        exchange: e.exchange,
+        hasSpot: !!e.spotPrice,
+        hasPerp: !!e.perpPrice,
+        spotPrice: e.spotPrice,
+        spotVolume: e.spotVolume,
+        perpPrice: e.perpPrice,
+        perpVolume: e.perpVolume
+      })) : []
+    };
   }
 
   // Coinbase implementation with volume from RealTimeVolumeService (spot only)

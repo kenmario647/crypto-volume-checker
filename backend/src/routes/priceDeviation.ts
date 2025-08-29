@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { getTopDeviations } from '../controllers/priceDeviationController';
+import { getTopDeviations, getSymbolDebug } from '../controllers/priceDeviationController';
 
 const router = Router();
 
 router.get('/top', getTopDeviations);
+router.get('/debug/:symbol', getSymbolDebug);
 
 export default router;

@@ -8,7 +8,7 @@ export const getTopDeviations = async (req: Request, res: Response) => {
   try {
     // Default to 999 (effectively all) if not specified
     const limit = parseInt(req.query.limit as string) || 999;
-    const minVolume = parseFloat(req.query.minVolume as string) || 50000000; // Default 50M
+    const minVolume = req.query.minVolume !== undefined ? parseFloat(req.query.minVolume as string) : 0; // Default 0 (no filter)
     const sortOrder = (req.query.sortOrder as string) || 'asc'; // Default 'asc' (負から正)
     
     // Always use WebSocket real-time prices from all exchanges
@@ -24,6 +24,26 @@ export const getTopDeviations = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch price deviations'
+    });
+  }
+};
+
+export const getSymbolDebug = async (req: Request, res: Response) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const debugData = priceDeviationService.getSymbolDebugData(symbol);
+    
+    res.json({
+      success: true,
+      symbol,
+      data: debugData,
+      timestamp: new Date()
+    });
+  } catch (error) {
+    logger.error('Error in getSymbolDebug:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch symbol debug data'
     });
   }
 };

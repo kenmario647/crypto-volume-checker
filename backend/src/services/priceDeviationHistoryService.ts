@@ -100,8 +100,8 @@ export class PriceDeviationHistoryService {
    */
   private async collectCurrentData(): Promise<void> {
     try {
-      // Get all deviations with volume >= 50M (no limit on count)
-      const currentData = await this.priceDeviationService.getWebSocketDeviations(999, 50000000);
+      // Get all deviations with volume >= 10M (no limit on count)
+      const currentData = await this.priceDeviationService.getWebSocketDeviations(999, 10000000);
       const timestamp = Date.now();
 
       logger.info(`Collecting deviation history data for ${currentData.length} symbols`);
@@ -143,8 +143,8 @@ export class PriceDeviationHistoryService {
    */
   private async collectFundingRates(): Promise<void> {
     try {
-      // Get all deviations with volume >= 50M to get symbols list
-      const currentData = await this.priceDeviationService.getWebSocketDeviations(999, 50000000);
+      // Get all deviations with volume >= 10M to get symbols list
+      const currentData = await this.priceDeviationService.getWebSocketDeviations(999, 10000000);
       
       logger.info(`Collecting Funding Rate data for ${currentData.length} symbols`);
 

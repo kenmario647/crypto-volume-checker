@@ -143,40 +143,54 @@ export class CoinbaseClient {
       logger.info(`Checking all ${pairsToCheck.length} USD pairs on Coinbase`);
 
       // Process in smaller batches to avoid rate limiting
-      const batchSize = 15; // Reduced from 30 to 15
+      const batchSize = 10; // Reduced from 15 to 10 for better reliability
       const usdVolumes: CoinbaseVolumeData[] = [];
+      let failedCount = 0;
+      let successCount = 0;
       
       for (let i = 0; i < pairsToCheck.length; i += batchSize) {
         const batch = pairsToCheck.slice(i, i + batchSize);
         const tickerPromises = batch.map(async (product: any) => {
-          try {
-            const ticker = await axios.get(`${this.baseURL}/products/${product.id}/ticker`, {
-              timeout: 1000, // Increased from 800ms to 1000ms
-              headers: {
-                'Accept': 'application/json',
-                'User-Agent': 'Mozilla/5.0'
-              }
-            });
-            
-            if (ticker.data && ticker.data.volume && ticker.data.price) {
-              const volumeUSD = parseFloat(ticker.data.volume) * parseFloat(ticker.data.price);
-              if (volumeUSD > 0) {
-                // Debug log for high volume coins and CRO
-                if (volumeUSD > 100000000 || product.base_currency === 'PROMPT' || product.base_currency === 'CRO') {
-                  logger.info(`High volume coin: ${product.base_currency} - $${(volumeUSD/1e6).toFixed(2)}M`);
+          // Retry logic for each ticker
+          let retries = 2; // Allow 1 retry
+          while (retries > 0) {
+            try {
+              const ticker = await axios.get(`${this.baseURL}/products/${product.id}/ticker`, {
+                timeout: 2000, // Increased from 1000ms to 2000ms
+                headers: {
+                  'Accept': 'application/json',
+                  'User-Agent': 'Mozilla/5.0'
                 }
-                return {
-                  symbol: product.base_currency,
-                  volume: volumeUSD,
-                  change24h: 0, // Price change not available in ticker endpoint
-                  price: parseFloat(ticker.data.price)
-                };
+              });
+              
+              if (ticker.data && ticker.data.volume && ticker.data.price) {
+                const volumeUSD = parseFloat(ticker.data.volume) * parseFloat(ticker.data.price);
+                if (volumeUSD > 0) {
+                  // Debug log for high volume coins
+                  if (volumeUSD > 100000000) {
+                    logger.info(`High volume coin: ${product.base_currency} - $${(volumeUSD/1e6).toFixed(2)}M`);
+                  }
+                  successCount++;
+                  return {
+                    symbol: product.base_currency,
+                    volume: volumeUSD,
+                    change24h: 0, // Price change not available in ticker endpoint
+                    price: parseFloat(ticker.data.price)
+                  };
+                }
               }
-            }
-          } catch (err: any) {
-            // Log errors for PROMPT and CRO specifically
-            if (product.base_currency === 'PROMPT' || product.base_currency === 'CRO') {
-              logger.error(`Failed to fetch ${product.base_currency} ticker: ${err.message || err}`);
+              break; // If we get here without error, break retry loop
+            } catch (err: any) {
+              retries--;
+              if (retries === 0) {
+                failedCount++;
+                // Log ALL failures with volume estimate if available
+                const errorType = err.code || err.response?.status || 'UNKNOWN';
+                logger.warn(`Failed to fetch ${product.base_currency} ticker after retries: ${errorType} - ${err.message}`);
+              } else {
+                // Wait before retry
+                await new Promise(resolve => setTimeout(resolve, 500));
+              }
             }
           }
           return null;
@@ -191,21 +205,31 @@ export class CoinbaseClient {
         
         // Log progress every 60 pairs or at the end
         if ((i + batchSize) % 60 === 0 || i + batchSize >= pairsToCheck.length) {
-          logger.info(`Processed ${Math.min(i + batchSize, pairsToCheck.length)}/${pairsToCheck.length} Coinbase pairs`);
+          const processed = Math.min(i + batchSize, pairsToCheck.length);
+          logger.info(`Processed ${processed}/${pairsToCheck.length} Coinbase pairs (Success: ${successCount}, Failed: ${failedCount})`);
         }
         
         // Add delay between batches to avoid rate limiting (except for last batch)
         if (i + batchSize < pairsToCheck.length) {
-          await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay between batches
+          await new Promise(resolve => setTimeout(resolve, 150)); // Increased from 100ms to 150ms
         }
       }
 
-      // Sort by volume and return top pairs
-      usdVolumes.sort((a, b) => b.volume - a.volume);
-      const topPairs = usdVolumes.slice(0, limit);
+      // Log final statistics
+      const failureRate = failedCount > 0 ? ((failedCount / (successCount + failedCount)) * 100).toFixed(1) : '0';
+      logger.info(`Coinbase fetch complete - Success: ${successCount}, Failed: ${failedCount} (${failureRate}% failure rate)`);
       
-      logger.info(`Fetched ${topPairs.length} Coinbase pairs`);
-      return topPairs;
+      // Sort by volume and return all fetched data (not limited)
+      usdVolumes.sort((a, b) => b.volume - a.volume);
+      
+      // Log top 5 for verification
+      const top5 = usdVolumes.slice(0, 5);
+      top5.forEach((coin, idx) => {
+        logger.info(`  ${idx + 1}. ${coin.symbol}: $${(coin.volume/1e6).toFixed(1)}M`);
+      });
+      
+      logger.info(`Returning ${usdVolumes.length} Coinbase pairs (all volumes)`);
+      return usdVolumes; // Return ALL data, not just top N
     } catch (error: any) {
       // Fallback to v2 API if v3 fails
       try {

@@ -21,9 +21,11 @@ import {
   DialogActions,
   Button,
   ToggleButton,
-  ToggleButtonGroup
+  ToggleButtonGroup,
+  TextField,
+  InputAdornment
 } from '@mui/material';
-import { TrendingUp, TrendingDown, Warning, Refresh } from '@mui/icons-material';
+import { TrendingUp, TrendingDown, Warning, Refresh, Search, Clear } from '@mui/icons-material';
 import axios from 'axios';
 import io from 'socket.io-client';
 import DeviationAreaChart from './DeviationAreaChart';
@@ -66,6 +68,7 @@ const PriceDeviationTable: React.FC = () => {
   const [lastUpdate, setLastUpdate] = useState<string>('');
   const [chartModalOpen, setChartModalOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc'); // asc: 負から正（デフォルト）、desc: 正から負
+  const [searchQuery, setSearchQuery] = useState<string>(''); // 検索クエリ
 
   useEffect(() => {
     // 並列で初期データ取得を開始
@@ -126,7 +129,7 @@ const PriceDeviationTable: React.FC = () => {
       
       const params: any = { 
         limit: 999, // 常に全銘柄を取得
-        minVolume: 50000000, // Always filter by 50M
+        minVolume: 10000000, // Only show coins with 10M+ volume
         sortOrder: sortOrder
       };
       
@@ -290,16 +293,30 @@ const PriceDeviationTable: React.FC = () => {
 
   return (
     <Box>
-      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box>
-          <Typography variant="body1" sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.95rem', mb: 0.5 }}>
-            現物・先物価格乖離率（Total Volume ≥ $50M） - 全{data.length}銘柄
-          </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            各銘柄で最も出来高の高い現物取引所と先物取引所の価格乖離率を表示しています（総取引量5000万ドル以上）
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      <Box sx={{ mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box>
+            <Typography variant="body1" sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.95rem', mb: 0.5 }}>
+              現物・先物価格乖離率（Total Volume ≥ $50M） - 
+              {searchQuery ? (
+                <>
+                  検索結果: {data.filter((row) => {
+                    const query = searchQuery.toUpperCase();
+                    return (
+                      row.symbol.toUpperCase().includes(query) ||
+                      row.spotExchange.toUpperCase().includes(query) ||
+                      row.perpExchange.toUpperCase().includes(query)
+                    );
+                  }).length}件 / 
+                </>
+              ) : null}
+              全{data.length}銘柄
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              各銘柄で最も出来高の高い現物取引所と先物取引所の価格乖離率を表示しています（総取引量5000万ドル以上）
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <ToggleButtonGroup
             value={sortOrder}
             exclusive
@@ -351,6 +368,58 @@ const PriceDeviationTable: React.FC = () => {
           </IconButton>
         </Box>
       </Box>
+      
+      {/* 検索ボックス */}
+      <Box sx={{ mb: 2 }}>
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="銘柄を検索（例: BTC, ETH, SOL）"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search sx={{ color: 'text.secondary' }} />
+              </InputAdornment>
+            ),
+            endAdornment: searchQuery && (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  onClick={() => setSearchQuery('')}
+                  edge="end"
+                >
+                  <Clear sx={{ fontSize: 18 }} />
+                </IconButton>
+              </InputAdornment>
+            ),
+            sx: {
+              backgroundColor: 'background.paper',
+              '& input': {
+                color: 'white',
+              },
+              '&:hover': {
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              },
+            }
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              '& fieldset': {
+                borderColor: '#333',
+              },
+              '&:hover fieldset': {
+                borderColor: '#555',
+              },
+              '&.Mui-focused fieldset': {
+                borderColor: '#F3BA2F',
+              },
+            },
+          }}
+        />
+      </Box>
+    </Box>
 
       <TableContainer 
         component={Paper} 
@@ -385,7 +454,18 @@ const PriceDeviationTable: React.FC = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {data.map((row) => (
+                {data
+                  .filter((row) => {
+                    // 検索フィルタリング
+                    if (!searchQuery) return true;
+                    const query = searchQuery.toUpperCase();
+                    return (
+                      row.symbol.toUpperCase().includes(query) ||
+                      row.spotExchange.toUpperCase().includes(query) ||
+                      row.perpExchange.toUpperCase().includes(query)
+                    );
+                  })
+                  .map((row) => (
                   <TableRow 
                     key={`${row.symbol}-${row.spotExchange}-${row.perpExchange}`} 
                     hover 
@@ -403,7 +483,19 @@ const PriceDeviationTable: React.FC = () => {
                       </Typography>
                     </TableCell>
                     <TableCell sx={{ py: 0.5 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'white', fontSize: '12px' }}>
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          fontWeight: 'bold', 
+                          color: searchQuery && row.symbol.toUpperCase().includes(searchQuery.toUpperCase()) 
+                            ? '#F3BA2F' 
+                            : 'white', 
+                          fontSize: '12px',
+                          textShadow: searchQuery && row.symbol.toUpperCase().includes(searchQuery.toUpperCase())
+                            ? '0 0 8px rgba(243, 186, 47, 0.5)'
+                            : 'none'
+                        }}
+                      >
                         {row.symbol}
                       </Typography>
                     </TableCell>
@@ -490,6 +582,27 @@ const PriceDeviationTable: React.FC = () => {
                     </TableCell>
                   </TableRow>
                 ))}
+                
+                {/* 検索結果が0件の場合の表示 */}
+                {searchQuery && data.filter((row) => {
+                  const query = searchQuery.toUpperCase();
+                  return (
+                    row.symbol.toUpperCase().includes(query) ||
+                    row.spotExchange.toUpperCase().includes(query) ||
+                    row.perpExchange.toUpperCase().includes(query)
+                  );
+                }).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                      <Typography variant="body1" sx={{ color: 'text.secondary' }}>
+                        「{searchQuery}」に一致する銘柄が見つかりません
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 1 }}>
+                        他のキーワードで検索してください
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
       </TableContainer>
