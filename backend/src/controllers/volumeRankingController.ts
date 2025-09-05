@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { ApiResponse } from '../types';
 import { logger } from '../utils/logger';
 import { StartupVolumeTracker } from '../services/startupVolumeTracker';
+import { HourlyRankTracker } from '../services/hourlyRankTracker';
 
 // This will be injected from the main server
 export let realTimeVolumeService: any = null;
@@ -63,11 +64,18 @@ export class VolumeRankingController {
       }
 
       const binanceData = realTimeVolumeService.getBinanceData();
+      const hourlyTracker = HourlyRankTracker.getInstance();
+      
+      // Add hourly data to each ranking
+      const enhancedData = binanceData.map((item: any) => ({
+        ...item,
+        hourlyChanges: hourlyTracker.getFormattedHourlyChanges('binance', item.symbol)
+      }));
       
       const response: ApiResponse<any> = {
         success: true,
         data: {
-          rankings: binanceData,
+          rankings: enhancedData,
           exchange: 'binance',
           updateTime: new Date().toISOString(),
           totalPairs: binanceData.length
@@ -99,11 +107,18 @@ export class VolumeRankingController {
       }
 
       const binanceSpotData = realTimeVolumeService.getBinanceSpotData();
+      const hourlyTracker = HourlyRankTracker.getInstance();
+      
+      // Add hourly data to each ranking
+      const enhancedData = binanceSpotData.map((item: any) => ({
+        ...item,
+        hourlyChanges: hourlyTracker.getFormattedHourlyChanges('binance-spot', item.symbol)
+      }));
       
       const response: ApiResponse<any> = {
         success: true,
         data: {
-          rankings: binanceSpotData,
+          rankings: enhancedData,
           exchange: 'binance-spot',
           updateTime: new Date().toISOString(),
           totalPairs: binanceSpotData.length
@@ -135,11 +150,18 @@ export class VolumeRankingController {
       }
 
       const upbitData = realTimeVolumeService.getUpbitData();
+      const hourlyTracker = HourlyRankTracker.getInstance();
+      
+      // Add hourly data to each ranking
+      const enhancedData = upbitData.map((item: any) => ({
+        ...item,
+        hourlyChanges: hourlyTracker.getFormattedHourlyChanges('upbit', item.symbol)
+      }));
       
       const response: ApiResponse<any> = {
         success: true,
         data: {
-          rankings: upbitData,
+          rankings: enhancedData,
           exchange: 'upbit',
           updateTime: new Date().toISOString(),
           totalPairs: upbitData.length
@@ -171,11 +193,18 @@ export class VolumeRankingController {
       }
 
       const bybitData = realTimeVolumeService.getBybitData();
+      const hourlyTracker = HourlyRankTracker.getInstance();
+      
+      // Add hourly data to each ranking
+      const enhancedData = bybitData.map((item: any) => ({
+        ...item,
+        hourlyChanges: hourlyTracker.getFormattedHourlyChanges('bybit', item.symbol)
+      }));
       
       const response: ApiResponse<any> = {
         success: true,
         data: {
-          rankings: bybitData,
+          rankings: enhancedData,
           exchange: 'bybit',
           updateTime: new Date().toISOString(),
           totalPairs: bybitData.length
@@ -207,11 +236,18 @@ export class VolumeRankingController {
       }
 
       const okxData = realTimeVolumeService.getOkxData();
+      const hourlyTracker = HourlyRankTracker.getInstance();
+      
+      // Add hourly data to each ranking
+      const enhancedData = okxData.map((item: any) => ({
+        ...item,
+        hourlyChanges: hourlyTracker.getFormattedHourlyChanges('okx', item.symbol)
+      }));
       
       const response: ApiResponse<any> = {
         success: true,
         data: {
-          rankings: okxData,
+          rankings: enhancedData,
           exchange: 'okx',
           updateTime: new Date().toISOString(),
           totalPairs: okxData.length
@@ -243,11 +279,18 @@ export class VolumeRankingController {
       }
 
       const gateioData = realTimeVolumeService.getGateioData();
+      const hourlyTracker = HourlyRankTracker.getInstance();
+      
+      // Add hourly data to each ranking
+      const enhancedData = gateioData.map((item: any) => ({
+        ...item,
+        hourlyChanges: hourlyTracker.getFormattedHourlyChanges('gateio', item.symbol)
+      }));
       
       const response: ApiResponse<any> = {
         success: true,
         data: {
-          rankings: gateioData,
+          rankings: enhancedData,
           exchange: 'gateio',
           updateTime: new Date().toISOString(),
           totalPairs: gateioData.length
@@ -279,11 +322,18 @@ export class VolumeRankingController {
       }
 
       const bitgetData = realTimeVolumeService.getBitgetData();
+      const hourlyTracker = HourlyRankTracker.getInstance();
+      
+      // Add hourly data to each ranking
+      const enhancedData = bitgetData.map((item: any) => ({
+        ...item,
+        hourlyChanges: hourlyTracker.getFormattedHourlyChanges('bitget', item.symbol)
+      }));
       
       const response: ApiResponse<any> = {
         success: true,
         data: {
-          rankings: bitgetData,
+          rankings: enhancedData,
           exchange: 'bitget',
           updateTime: new Date().toISOString(),
           totalPairs: bitgetData.length
@@ -388,11 +438,18 @@ export class VolumeRankingController {
       }
 
       const coinbaseData = realTimeVolumeService.getCoinbaseData();
+      const hourlyTracker = HourlyRankTracker.getInstance();
+      
+      // Add hourly data to each ranking
+      const enhancedData = coinbaseData.map((item: any) => ({
+        ...item,
+        hourlyChanges: hourlyTracker.getFormattedHourlyChanges('coinbase', item.symbol)
+      }));
       
       const response: ApiResponse<any> = {
         success: true,
         data: {
-          rankings: coinbaseData,
+          rankings: enhancedData,
           exchange: 'coinbase',
           updateTime: new Date().toISOString(),
           totalPairs: coinbaseData.length

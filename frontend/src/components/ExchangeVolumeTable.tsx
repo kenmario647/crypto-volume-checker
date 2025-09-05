@@ -22,6 +22,13 @@ import { TrendingUp, TrendingDown, ShowChart, Star } from '@mui/icons-material';
 import io from 'socket.io-client';
 import VolumeDetailChart from './VolumeDetailChart';
 
+interface HourlyChange {
+  time: string;
+  rank: number;
+  change: number;
+  direction: string;
+}
+
 interface VolumeRankingData {
   symbol: string;
   volume: string;
@@ -37,6 +44,7 @@ interface VolumeRankingData {
   volumeSpike?: boolean;
   newRankIn?: boolean;
   volumeIncrease5m?: number;
+  hourlyChanges?: HourlyChange[];
 }
 
 interface ExchangeVolumeTableProps {
@@ -455,8 +463,8 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
               <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold' }}>
                 ランク
               </TableCell>
-              <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold' }}>
-                起動時順位
+              <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold', minWidth: '280px' }}>
+                時間別順位（最新6時間）
               </TableCell>
               <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold' }}>
                 シンボル
@@ -495,15 +503,49 @@ const ExchangeVolumeTable: React.FC<ExchangeVolumeTableProps> = ({ exchange }) =
                   </Box>
                 </TableCell>
                 <TableCell>
-                  <Chip
-                    label={row.initialRank ? `#${row.initialRank}` : '-'}
-                    size="small"
-                    sx={{
-                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                      color: 'rgba(255, 255, 255, 0.7)',
-                      fontSize: '0.75rem'
-                    }}
-                  />
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, flexWrap: 'wrap' }}>
+                    {row.hourlyChanges && row.hourlyChanges.length > 0 ? (
+                      row.hourlyChanges.slice(-6).map((change: HourlyChange, idx: number) => (
+                        <Box key={idx} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '42px' }}>
+                          <Typography variant="caption" sx={{ color: '#FFD700', fontSize: '9px', fontWeight: 'bold' }}>
+                            {change.time}
+                          </Typography>
+                          <Chip
+                            size="small"
+                            label={`${change.rank}位`}
+                            sx={{
+                              backgroundColor: change.change > 0 ? '#4caf5030' : change.change < 0 ? '#f4433630' : '#2196f330',
+                              color: change.change > 0 ? '#76ff03' : change.change < 0 ? '#ff5252' : '#64b5f6',
+                              border: `1px solid ${change.change > 0 ? '#4caf50' : change.change < 0 ? '#f44336' : '#2196f3'}`,
+                              fontSize: '11px',
+                              fontWeight: 'bold',
+                              height: '18px',
+                              minWidth: '40px',
+                              '& .MuiChip-label': {
+                                padding: '0 4px',
+                              }
+                            }}
+                          />
+                          {change.change !== 0 && (
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                color: change.change > 0 ? '#76ff03' : '#ff5252',
+                                fontSize: '9px',
+                                fontWeight: 'bold'
+                              }}
+                            >
+                              {change.change > 0 ? '↑' : '↓'}{Math.abs(change.change)}
+                            </Typography>
+                          )}
+                        </Box>
+                      ))
+                    ) : (
+                      <Typography variant="caption" sx={{ color: '#999', fontSize: '11px' }}>
+                        データ収集中...
+                      </Typography>
+                    )}
+                  </Box>
                 </TableCell>
                 <TableCell>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

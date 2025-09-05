@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { logger } from '../utils/logger';
 import { SpotPerpVolumeService } from '../services/spotPerpVolumeService';
+import { HourlyRankTracker } from '../services/hourlyRankTracker';
 
 export class SpotPerpVolumeController {
   private spotPerpVolumeService: SpotPerpVolumeService;
@@ -22,10 +23,17 @@ export class SpotPerpVolumeController {
       }
 
       const data = await this.spotPerpVolumeService.getSpotVolumes(exchange as string, limit);
+      const hourlyTracker = HourlyRankTracker.getInstance();
+      
+      // Add hourly data to each ranking (use exchange-spot to differentiate from PERP)
+      const enhancedData = data.map((item: any) => ({
+        ...item,
+        hourlyChanges: hourlyTracker.getFormattedHourlyChanges(`${exchange}-spot`, item.symbol)
+      }));
       
       res.json({
         success: true,
-        data,
+        data: enhancedData,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
@@ -51,10 +59,17 @@ export class SpotPerpVolumeController {
       }
 
       const data = await this.spotPerpVolumeService.getPerpVolumes(exchange as string, limit);
+      const hourlyTracker = HourlyRankTracker.getInstance();
+      
+      // Add hourly data to each ranking (use exchange-perp to differentiate from SPOT)
+      const enhancedData = data.map((item: any) => ({
+        ...item,
+        hourlyChanges: hourlyTracker.getFormattedHourlyChanges(`${exchange}-perp`, item.symbol)
+      }));
       
       res.json({
         success: true,
-        data,
+        data: enhancedData,
         timestamp: new Date().toISOString()
       });
     } catch (error) {

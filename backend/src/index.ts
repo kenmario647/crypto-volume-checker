@@ -16,6 +16,7 @@ import priceDeviationRoutes from './routes/priceDeviation';
 import priceDeviationHistoryRoutes from './routes/priceDeviationHistory';
 import frOiRoutes from './routes/frOi';
 import browserLogsRoutes from './routes/browserLogs';
+import hourlyRanksRoutes from './routes/hourlyRanks';
 import RealTimeVolumeService from './services/realTimeVolumeService';
 import FrOiService from './services/frOiService';
 import { setRealTimeVolumeService } from './controllers/volumeRankingController';
@@ -62,6 +63,7 @@ app.use('/api/price-deviation', priceDeviationRoutes);
 app.use('/api/price-deviation-history', priceDeviationHistoryRoutes);
 app.use('/api/fr-oi', frOiRoutes);
 app.use('/api/browser-logs', browserLogsRoutes);
+app.use('/api/hourly-ranks', hourlyRanksRoutes);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ 

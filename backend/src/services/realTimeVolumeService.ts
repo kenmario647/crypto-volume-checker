@@ -12,6 +12,7 @@ import { CoinbaseClient } from './coinbaseClient';
 import { ExchangeRateService } from './exchangeRateService';
 import { logger } from '../utils/logger';
 import { StartupVolumeTracker } from './startupVolumeTracker';
+import { HourlyRankTracker } from './hourlyRankTracker';
 
 export interface VolumeHistory {
   timestamp: number;
@@ -77,11 +78,13 @@ export class RealTimeVolumeService extends EventEmitter {
   private volumeHistory: Map<string, VolumeHistory[]> = new Map();
   private previousRankings: Map<string, Map<string, number>> = new Map(); // exchange -> symbol -> rank
   private isFirstFetch: Set<string> = new Set(); // Track first fetch for each exchange/market
+  private hourlyRankTracker: HourlyRankTracker;
 
   constructor() {
     super();
     
     this.volumeTracker = StartupVolumeTracker.getInstance();
+    this.hourlyRankTracker = HourlyRankTracker.getInstance();
     this.binanceAPI = new BinanceRestApiService();
     this.binanceSpotAPI = new BinanceSpotRestApiService();
     this.upbitAPI = new UpbitRestApiService();
@@ -158,6 +161,9 @@ export class RealTimeVolumeService extends EventEmitter {
     // Store initial volume and rank on first fetch
     this.volumeTracker.setInitialData('binance', data.symbol, quoteVolumeUSD, data.rank);
     
+    // Update hourly rank tracker
+    this.hourlyRankTracker.updateRank('binance', data.symbol, data.rank);
+    
     // Calculate volume change from startup
     const volumeChangeFromStartup = this.volumeTracker.calculateVolumeChangeFromStartup('binance', data.symbol, quoteVolumeUSD);
     
@@ -194,6 +200,9 @@ export class RealTimeVolumeService extends EventEmitter {
     
     // Store initial volume and rank on first fetch
     this.volumeTracker.setInitialData('binance-spot', data.symbol, quoteVolumeUSD, data.rank);
+    
+    // Update hourly rank tracker
+    this.hourlyRankTracker.updateRank('binance-spot', data.symbol, data.rank);
     
     // Calculate volume change from startup
     const volumeChangeFromStartup = this.volumeTracker.calculateVolumeChangeFromStartup('binance-spot', data.symbol, quoteVolumeUSD);
@@ -233,6 +242,9 @@ export class RealTimeVolumeService extends EventEmitter {
     
     // Store initial volume and rank on first fetch
     this.volumeTracker.setInitialData('upbit', data.symbol, quoteVolumeUSD, data.rank);
+    
+    // Update hourly rank tracker
+    this.hourlyRankTracker.updateRank('upbit', data.symbol, data.rank);
     
     // Calculate volume change from startup
     const volumeChangeFromStartup = this.volumeTracker.calculateVolumeChangeFromStartup('upbit', data.symbol, quoteVolumeUSD);
@@ -567,6 +579,9 @@ export class RealTimeVolumeService extends EventEmitter {
     
     // Store initial volume and rank on first fetch
     this.volumeTracker.setInitialData(exchange, symbol, quoteVolumeUSD, rank);
+    
+    // Update hourly rank tracker
+    this.hourlyRankTracker.updateRank(exchange, symbol, rank);
     
     // Calculate volume change from startup
     const volumeChangeFromStartup = this.volumeTracker.calculateVolumeChangeFromStartup(exchange, symbol, quoteVolumeUSD);

@@ -10,6 +10,7 @@ import { CoinbaseClient } from './coinbaseClient';
 import { MEXCClient } from './mexcClient';
 import { BithumbClient } from './bithumbClient';
 import { ExchangeRateService } from './exchangeRateService';
+import { HourlyRankTracker } from './hourlyRankTracker';
 
 interface SpotPerpVolumeData {
   rank: number;
@@ -177,6 +178,10 @@ export class SpotPerpVolumeService {
         // Store new ranking
         newRankMap.set(symbol, rank);
         
+        // Update hourly rank tracker for SPOT
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('binance-spot', symbol, rank);
+        
         return {
           rank,
           symbol,
@@ -225,6 +230,10 @@ export class SpotPerpVolumeService {
         // Store new ranking
         newRankMap.set(symbol, rank);
         
+        // Update hourly rank tracker for PERP
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('binance-perp', symbol, rank);
+        
         return {
           rank,
           symbol,
@@ -269,6 +278,10 @@ export class SpotPerpVolumeService {
         
         // Store new ranking
         newRankMap.set(symbol, rank);
+        
+        // Update hourly rank tracker for SPOT
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('bybit-spot', symbol, rank);
         
         return {
           rank,
@@ -315,6 +328,10 @@ export class SpotPerpVolumeService {
         // Store new ranking
         newRankMap.set(symbol, rank);
         
+        // Update hourly rank tracker for PERP
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('bybit-perp', symbol, rank);
+        
         return {
           rank,
           symbol,
@@ -347,16 +364,25 @@ export class SpotPerpVolumeService {
         .filter((t: any) => t.instId.endsWith('-USDT'))
         .sort((a: any, b: any) => parseFloat(b.volCcy24h) - parseFloat(a.volCcy24h));
       
-      return tickers.map((ticker: any, index: number) => ({
-        rank: index + 1,
-        symbol: ticker.instId.replace('-USDT', ''),
-        price: parseFloat(ticker.last),
-        change24h: ((parseFloat(ticker.last) - parseFloat(ticker.open24h)) / parseFloat(ticker.open24h)) * 100,
-        volume24h: parseFloat(ticker.vol24h),
-        volumeUsd: parseFloat(ticker.volCcy24h),
-        marketType: 'SPOT' as const,
-        exchange: 'okx'
-      }));
+      return tickers.map((ticker: any, index: number) => {
+        const rank = index + 1;
+        const symbol = ticker.instId.replace('-USDT', '');
+        
+        // Update hourly rank tracker for SPOT
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('okx-spot', symbol, rank);
+        
+        return {
+          rank,
+          symbol,
+          price: parseFloat(ticker.last),
+          change24h: ((parseFloat(ticker.last) - parseFloat(ticker.open24h)) / parseFloat(ticker.open24h)) * 100,
+          volume24h: parseFloat(ticker.vol24h),
+          volumeUsd: parseFloat(ticker.volCcy24h),
+          marketType: 'SPOT' as const,
+          exchange: 'okx'
+        };
+      });
     } catch (error) {
       logger.error('Error fetching OKX spot volumes:', error);
       return [];
@@ -380,16 +406,25 @@ export class SpotPerpVolumeService {
         })
         .sort((a: any, b: any) => b.calculatedVolumeUsd - a.calculatedVolumeUsd);
       
-      return tickers.map((ticker: any, index: number) => ({
-        rank: index + 1,
-        symbol: ticker.instId.split('-')[0],
-        price: parseFloat(ticker.last),
-        change24h: ((parseFloat(ticker.last) - parseFloat(ticker.open24h)) / parseFloat(ticker.open24h)) * 100,
-        volume24h: parseFloat(ticker.volCcy24h), // Use volCcy24h for actual volume
-        volumeUsd: ticker.calculatedVolumeUsd,
-        marketType: 'PERP' as const,
-        exchange: 'okx'
-      }));
+      return tickers.map((ticker: any, index: number) => {
+        const rank = index + 1;
+        const symbol = ticker.instId.split('-')[0];
+        
+        // Update hourly rank tracker for PERP
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('okx-perp', symbol, rank);
+        
+        return {
+          rank,
+          symbol,
+          price: parseFloat(ticker.last),
+          change24h: ((parseFloat(ticker.last) - parseFloat(ticker.open24h)) / parseFloat(ticker.open24h)) * 100,
+          volume24h: parseFloat(ticker.volCcy24h), // Use volCcy24h for actual volume
+          volumeUsd: ticker.calculatedVolumeUsd,
+          marketType: 'PERP' as const,
+          exchange: 'okx'
+        };
+      });
     } catch (error) {
       logger.error('Error fetching OKX perp volumes:', error);
       return [];
@@ -403,16 +438,25 @@ export class SpotPerpVolumeService {
         .filter((t: any) => t.currency_pair.endsWith('_USDT'))
         .sort((a: any, b: any) => parseFloat(b.quote_volume) - parseFloat(a.quote_volume));
       
-      return tickers.map((ticker: any, index: number) => ({
-        rank: index + 1,
-        symbol: ticker.currency_pair.replace('_USDT', ''),
-        price: parseFloat(ticker.last),
-        change24h: parseFloat(ticker.change_percentage),
-        volume24h: parseFloat(ticker.base_volume),
-        volumeUsd: parseFloat(ticker.quote_volume),
-        marketType: 'SPOT' as const,
-        exchange: 'gateio'
-      }));
+      return tickers.map((ticker: any, index: number) => {
+        const rank = index + 1;
+        const symbol = ticker.currency_pair.replace('_USDT', '');
+        
+        // Update hourly rank tracker for SPOT
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('gateio-spot', symbol, rank);
+        
+        return {
+          rank,
+          symbol,
+          price: parseFloat(ticker.last),
+          change24h: parseFloat(ticker.change_percentage),
+          volume24h: parseFloat(ticker.base_volume),
+          volumeUsd: parseFloat(ticker.quote_volume),
+          marketType: 'SPOT' as const,
+          exchange: 'gateio'
+        };
+      });
     } catch (error) {
       logger.error('Error fetching Gate.io spot volumes:', error);
       return [];
@@ -426,16 +470,25 @@ export class SpotPerpVolumeService {
         .filter((t: any) => t.contract.endsWith('_USDT'))
         .sort((a: any, b: any) => parseFloat(b.volume_24h_quote || '0') - parseFloat(a.volume_24h_quote || '0'));
       
-      return tickers.map((ticker: any, index: number) => ({
-        rank: index + 1,
-        symbol: ticker.contract.replace('_USDT', ''),
-        price: parseFloat(ticker.last),
-        change24h: parseFloat(ticker.change_percentage),
-        volume24h: parseFloat(ticker.volume_24h),
-        volumeUsd: parseFloat(ticker.volume_24h_quote || ticker.volume_24h_settle || '0'),
-        marketType: 'PERP' as const,
-        exchange: 'gateio'
-      }));
+      return tickers.map((ticker: any, index: number) => {
+        const rank = index + 1;
+        const symbol = ticker.contract.replace('_USDT', '');
+        
+        // Update hourly rank tracker for PERP
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('gateio-perp', symbol, rank);
+        
+        return {
+          rank,
+          symbol,
+          price: parseFloat(ticker.last),
+          change24h: parseFloat(ticker.change_percentage),
+          volume24h: parseFloat(ticker.volume_24h),
+          volumeUsd: parseFloat(ticker.volume_24h_quote || ticker.volume_24h_settle || '0'),
+          marketType: 'PERP' as const,
+          exchange: 'gateio'
+        };
+      });
     } catch (error) {
       logger.error('Error fetching Gate.io perp volumes:', error);
       return [];
@@ -454,14 +507,19 @@ export class SpotPerpVolumeService {
         .sort((a: any, b: any) => parseFloat(b.usdtVol || '0') - parseFloat(a.usdtVol || '0'));
       
       return tickers.map((ticker: any, index: number) => {
+        const rank = index + 1;
         // Handle special case for ZKSYNC -> ZK
         let symbol = ticker.symbol.replace('USDT', '');
         if (symbol === 'ZKSYNC') {
           symbol = 'ZK';
         }
         
+        // Update hourly rank tracker for SPOT
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('bitget-spot', symbol, rank);
+        
         return {
-          rank: index + 1,
+          rank,
           symbol,
           price: parseFloat(ticker.close || '0'),
           change24h: parseFloat(ticker.changeUtc || '0') * 100,
@@ -484,16 +542,25 @@ export class SpotPerpVolumeService {
         .filter((t: any) => t.symbol.endsWith('USDT_UMCBL'))
         .sort((a: any, b: any) => parseFloat(b.quoteVolume || '0') - parseFloat(a.quoteVolume || '0'));
       
-      return tickers.map((ticker: any, index: number) => ({
-        rank: index + 1,
-        symbol: ticker.symbol.replace('USDT_UMCBL', ''),
-        price: parseFloat(ticker.last || '0'),
-        change24h: parseFloat(ticker.chgUtc || '0') * 100,
-        volume24h: parseFloat(ticker.baseVolume || '0'),
-        volumeUsd: parseFloat(ticker.quoteVolume || '0'),
-        marketType: 'PERP' as const,
-        exchange: 'bitget'
-      }));
+      return tickers.map((ticker: any, index: number) => {
+        const rank = index + 1;
+        const symbol = ticker.symbol.replace('USDT_UMCBL', '');
+        
+        // Update hourly rank tracker for PERP
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('bitget-perp', symbol, rank);
+        
+        return {
+          rank,
+          symbol,
+          price: parseFloat(ticker.last || '0'),
+          change24h: parseFloat(ticker.chgUtc || '0') * 100,
+          volume24h: parseFloat(ticker.baseVolume || '0'),
+          volumeUsd: parseFloat(ticker.quoteVolume || '0'),
+          marketType: 'PERP' as const,
+          exchange: 'bitget'
+        };
+      });
     } catch (error) {
       logger.error('Error fetching Bitget perp volumes:', error);
       return [];
@@ -512,16 +579,25 @@ export class SpotPerpVolumeService {
       // Get real-time KRW to USD conversion rate
       const krwToUsd = this.exchangeRateService.getKrwToUsdRate();
       
-      return usdtTickers.map((ticker: any, index: number) => ({
-        rank: index + 1,
-        symbol: ticker.market.replace('KRW-', ''),
-        price: ticker.trade_price * krwToUsd,
-        change24h: ticker.signed_change_rate * 100,
-        volume24h: ticker.acc_trade_volume_24h,
-        volumeUsd: ticker.acc_trade_price_24h * krwToUsd,
-        marketType: 'SPOT' as const,
-        exchange: 'upbit'
-      }));
+      return usdtTickers.map((ticker: any, index: number) => {
+        const rank = index + 1;
+        const symbol = ticker.market.replace('KRW-', '');
+        
+        // Update hourly rank tracker for SPOT
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('upbit-spot', symbol, rank);
+        
+        return {
+          rank,
+          symbol,
+          price: ticker.trade_price * krwToUsd,
+          change24h: ticker.signed_change_rate * 100,
+          volume24h: ticker.acc_trade_volume_24h,
+          volumeUsd: ticker.acc_trade_price_24h * krwToUsd,
+          marketType: 'SPOT' as const,
+          exchange: 'upbit'
+        };
+      });
     } catch (error) {
       logger.error('Error fetching Upbit spot volumes:', error);
       return [];
@@ -540,16 +616,25 @@ export class SpotPerpVolumeService {
         })
         .slice(0, limit);
       
-      return sortedTickers.map((ticker: any, index: number) => ({
-        rank: index + 1,
-        symbol: ticker.product_id.replace('-USD', ''),
-        price: parseFloat(ticker.price || '0'),
-        change24h: parseFloat(ticker.price_percent_change_24h || '0'),
-        volume24h: parseFloat(ticker.volume || '0'),
-        volumeUsd: parseFloat(ticker.volume || '0') * parseFloat(ticker.price || '0'),
-        marketType: 'SPOT' as const,
-        exchange: 'coinbase'
-      }));
+      return sortedTickers.map((ticker: any, index: number) => {
+        const rank = index + 1;
+        const symbol = ticker.product_id.replace('-USD', '');
+        
+        // Update hourly rank tracker for SPOT
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('coinbase-spot', symbol, rank);
+        
+        return {
+          rank,
+          symbol,
+          price: parseFloat(ticker.price || '0'),
+          change24h: parseFloat(ticker.price_percent_change_24h || '0'),
+          volume24h: parseFloat(ticker.volume || '0'),
+          volumeUsd: parseFloat(ticker.volume || '0') * parseFloat(ticker.price || '0'),
+          marketType: 'SPOT' as const,
+          exchange: 'coinbase'
+        };
+      });
     } catch (error) {
       logger.error('Error fetching Coinbase spot volumes:', error);
       return [];
@@ -577,6 +662,10 @@ export class SpotPerpVolumeService {
         
         // Store new ranking
         newRankMap.set(symbol, rank);
+        
+        // Update hourly rank tracker for SPOT
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('mexc-spot', symbol, rank);
         
         return {
           rank,
@@ -621,16 +710,25 @@ export class SpotPerpVolumeService {
       // Get real-time KRW to USD conversion rate
       const krwToUsd = this.exchangeRateService.getKrwToUsdRate();
       
-      return tickers.map((ticker: any, index: number) => ({
-        rank: index + 1,
-        symbol: ticker.symbol,
-        price: parseFloat(ticker.closing_price || '0') * krwToUsd,
-        change24h: parseFloat(ticker.fluctate_rate_24H || '0'),
-        volume24h: parseFloat(ticker.units_traded_24H || '0'),
-        volumeUsd: parseFloat(ticker.acc_trade_value_24H || '0') * krwToUsd,
-        marketType: 'SPOT' as const,
-        exchange: 'bithumb'
-      }));
+      return tickers.map((ticker: any, index: number) => {
+        const rank = index + 1;
+        const symbol = ticker.symbol;
+        
+        // Update hourly rank tracker for SPOT
+        const hourlyTracker = HourlyRankTracker.getInstance();
+        hourlyTracker.updateRank('bithumb-spot', symbol, rank);
+        
+        return {
+          rank,
+          symbol,
+          price: parseFloat(ticker.closing_price || '0') * krwToUsd,
+          change24h: parseFloat(ticker.fluctate_rate_24H || '0'),
+          volume24h: parseFloat(ticker.units_traded_24H || '0'),
+          volumeUsd: parseFloat(ticker.acc_trade_value_24H || '0') * krwToUsd,
+          marketType: 'SPOT' as const,
+          exchange: 'bithumb'
+        };
+      });
     } catch (error) {
       logger.error('Error fetching Bithumb spot volumes:', error);
       return [];

@@ -19,6 +19,13 @@ import io from 'socket.io-client';
 import VolumeDetailChart from './VolumeDetailChart';
 import axios from 'axios';
 
+interface HourlyChange {
+  time: string;
+  rank: number;
+  change: number;
+  direction: string;
+}
+
 interface VolumeRankingData {
   symbol: string;
   volume: string;
@@ -34,6 +41,7 @@ interface VolumeRankingData {
   volumeSpike?: boolean;
   newRankIn?: boolean;
   volumeIncrease5m?: number;
+  hourlyChanges?: HourlyChange[];
 }
 
 interface SpotPerpVolumeData {
@@ -46,6 +54,7 @@ interface SpotPerpVolumeData {
   marketType: 'SPOT' | 'PERP';
   exchange: string;
   initialRank?: number;
+  hourlyChanges?: HourlyChange[];
 }
 
 interface ExchangeVolumeTableDualProps {
@@ -63,7 +72,7 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
   const [selectedSymbol, setSelectedSymbol] = useState<{ symbol: string; exchange: string } | null>(null);
 
   // Determine if exchange supports SPOT/PERP
-  const supportsSPOTPERP = ['binance', 'bybit', 'okx', 'gateio', 'bitget', 'mexc'].includes(exchange);
+  const supportsSPOTPERP = ['binance', 'bybit', 'okx', 'gateio', 'bitget', 'mexc', 'upbit', 'coinbase', 'bithumb'].includes(exchange);
 
   useEffect(() => {
     // Initial data fetch
@@ -190,6 +199,31 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
     try {
       setLoading(true);
       
+      // Special handling for SPOT-only exchanges (Upbit, Bithumb, Coinbase)
+      if (['upbit', 'bithumb', 'coinbase'].includes(exchange)) {
+        const spotResponse = await axios.get(
+          `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/spot-perp-volume/spot`,
+          { params: { exchange, limit: 15 } }
+        );
+        
+        if (spotResponse.data.success) {
+          console.log(`${exchange} SPOT data received:`, spotResponse.data.data?.length, 'items');
+          if (exchange === 'upbit') {
+            console.log('Full Upbit spot data:', spotResponse.data.data?.map((item: any) => ({
+              rank: item.rank,
+              symbol: item.symbol,
+              volumeUsd: item.volumeUsd
+            })));
+          }
+          setSpotData(spotResponse.data.data);
+          setPerpData([]); // No PERP data for these exchanges
+        }
+        
+        setLastUpdate(new Date().toLocaleTimeString());
+        setLoading(false);
+        return;
+      }
+      
       // Special handling for MEXC
       if (exchange === 'mexc') {
         const response = await axios.get(
@@ -266,6 +300,14 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
           rankChanged: item.rankChanged,
           newRankIn: item.newRankIn
         })));
+        // Log full data for Upbit to debug RED visibility
+        if (exchange === 'upbit') {
+          console.log('Full Upbit spot data:', spotResponse.data.data?.map((item: any) => ({
+            rank: item.rank,
+            symbol: item.symbol,
+            volumeUsd: item.volumeUsd
+          })));
+        }
         setSpotData(spotResponse.data.data);
       }
 
@@ -593,8 +635,8 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
               <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold', width: '50px' }}>
                 #
               </TableCell>
-              <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold', width: '80px' }}>
-                起動時
+              <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold', minWidth: '280px' }}>
+                時間別順位（最新6時間）
               </TableCell>
               <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold' }}>
                 Symbol
@@ -621,9 +663,49 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
                   </Box>
                 </TableCell>
                 <TableCell>
-                  <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.85rem' }}>
-                    #{row.initialRank || row.rank}
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, flexWrap: 'wrap' }}>
+                    {row.hourlyChanges && row.hourlyChanges.length > 0 ? (
+                      row.hourlyChanges.slice(-6).map((change: HourlyChange, idx: number) => (
+                        <Box key={idx} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '42px' }}>
+                          <Typography variant="caption" sx={{ color: '#FFD700', fontSize: '9px', fontWeight: 'bold' }}>
+                            {change.time}
+                          </Typography>
+                          <Chip
+                            size="small"
+                            label={`${change.rank}位`}
+                            sx={{
+                              backgroundColor: change.change > 0 ? '#4caf5030' : change.change < 0 ? '#f4433630' : '#2196f330',
+                              color: change.change > 0 ? '#76ff03' : change.change < 0 ? '#ff5252' : '#64b5f6',
+                              border: `1px solid ${change.change > 0 ? '#4caf50' : change.change < 0 ? '#f44336' : '#2196f3'}`,
+                              fontSize: '11px',
+                              fontWeight: 'bold',
+                              height: '18px',
+                              minWidth: '40px',
+                              '& .MuiChip-label': {
+                                padding: '0 4px',
+                              }
+                            }}
+                          />
+                          {change.change !== 0 && (
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                color: change.change > 0 ? '#76ff03' : '#ff5252',
+                                fontSize: '9px',
+                                fontWeight: 'bold'
+                              }}
+                            >
+                              {change.change > 0 ? '↑' : '↓'}{Math.abs(change.change)}
+                            </Typography>
+                          )}
+                        </Box>
+                      ))
+                    ) : (
+                      <Typography variant="caption" sx={{ color: '#999', fontSize: '11px' }}>
+                        データ収集中...
+                      </Typography>
+                    )}
+                  </Box>
                 </TableCell>
                 <TableCell>
                   <Typography 
@@ -670,8 +752,8 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
               <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold', width: '50px' }}>
                 Rank
               </TableCell>
-              <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold', width: '80px' }}>
-                起動時
+              <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold', minWidth: '280px' }}>
+                時間別順位（最新6時間）
               </TableCell>
               <TableCell sx={{ backgroundColor: '#1a1a1a', color: 'white', fontWeight: 'bold' }}>
                 Symbol
@@ -701,9 +783,49 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
                   </Box>
                 </TableCell>
                 <TableCell>
-                  <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.85rem' }}>
-                    #{row.initialRank || row.rank}
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, flexWrap: 'wrap' }}>
+                    {row.hourlyChanges && row.hourlyChanges.length > 0 ? (
+                      row.hourlyChanges.slice(-6).map((change: HourlyChange, idx: number) => (
+                        <Box key={idx} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '42px' }}>
+                          <Typography variant="caption" sx={{ color: '#FFD700', fontSize: '9px', fontWeight: 'bold' }}>
+                            {change.time}
+                          </Typography>
+                          <Chip
+                            size="small"
+                            label={`${change.rank}位`}
+                            sx={{
+                              backgroundColor: change.change > 0 ? '#4caf5030' : change.change < 0 ? '#f4433630' : '#2196f330',
+                              color: change.change > 0 ? '#76ff03' : change.change < 0 ? '#ff5252' : '#64b5f6',
+                              border: `1px solid ${change.change > 0 ? '#4caf50' : change.change < 0 ? '#f44336' : '#2196f3'}`,
+                              fontSize: '11px',
+                              fontWeight: 'bold',
+                              height: '18px',
+                              minWidth: '40px',
+                              '& .MuiChip-label': {
+                                padding: '0 4px',
+                              }
+                            }}
+                          />
+                          {change.change !== 0 && (
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                color: change.change > 0 ? '#76ff03' : '#ff5252',
+                                fontSize: '9px',
+                                fontWeight: 'bold'
+                              }}
+                            >
+                              {change.change > 0 ? '↑' : '↓'}{Math.abs(change.change)}
+                            </Typography>
+                          )}
+                        </Box>
+                      ))
+                    ) : (
+                      <Typography variant="caption" sx={{ color: '#999', fontSize: '11px' }}>
+                        データ収集中...
+                      </Typography>
+                    )}
+                  </Box>
                 </TableCell>
                 <TableCell>
                   <Typography 

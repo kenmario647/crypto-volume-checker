@@ -31,15 +31,21 @@ export class StartupVolumeTracker {
   public setInitialData(exchange: string, symbol: string, volume: number, rank: number) {
     const key = `${exchange}:${symbol}`;
     
-    // Only set if not already set (preserve the first data)
-    if (!this.startupVolumes.has(key)) {
-      this.startupVolumes.set(key, {
-        symbol,
-        exchange,
-        initialVolume: volume,
-        initialRank: rank,
-        initialTime: Date.now()
-      });
+    // Always update the current data but preserve initial rank if it exists
+    const existingData = this.startupVolumes.get(key);
+    const initialRank = existingData?.initialRank ?? rank;
+    const initialVolume = existingData?.initialVolume ?? volume;
+    const initialTime = existingData?.initialTime ?? Date.now();
+    
+    this.startupVolumes.set(key, {
+      symbol,
+      exchange,
+      initialVolume: initialVolume, // Keep the first volume
+      initialRank: initialRank,     // Keep the first rank
+      initialTime: initialTime      // Keep the first time
+    });
+    
+    if (!existingData) {
       logger.info(`Stored initial data for ${key}: Volume=$${volume.toFixed(2)}, Rank=${rank}`);
     }
   }
