@@ -176,22 +176,30 @@ export class VolumeService {
       if (exchange === 'binance') {
         const binanceData = realTimeVolumeService.getBinanceData();
         const searchSymbol = symbol.endsWith('USDT') ? symbol.replace('USDT', '') : symbol;
+        logger.info(`[BINANCE_PERP_DEBUG] Searching for symbol: ${searchSymbol} in binance futures data`);
         matchingTicker = binanceData.find((ticker: any) => {
           const tickerSymbol = ticker.symbol.replace('USDT', '');
           return tickerSymbol === searchSymbol || ticker.symbol === symbol;
         });
         if (matchingTicker) {
           tableSymbol = matchingTicker.symbol.replace('USDT', '');
+          logger.info(`[BINANCE_PERP_DEBUG] Found matching ticker: ${tableSymbol}, volume: ${matchingTicker.originalQuoteVolume}`);
+        } else {
+          logger.warn(`[BINANCE_PERP_DEBUG] No matching ticker found for: ${searchSymbol}`);
         }
       } else if (exchange === 'binance-spot') {
         const binanceSpotData = realTimeVolumeService.getBinanceSpotData();
         const searchSymbol = symbol.endsWith('USDT') ? symbol.replace('USDT', '') : symbol;
+        logger.info(`[BINANCE_SPOT_DEBUG] Searching for symbol: ${searchSymbol} in binance-spot data`);
         matchingTicker = binanceSpotData.find((ticker: any) => {
           const tickerSymbol = ticker.symbol.replace('USDT', '');
           return tickerSymbol === searchSymbol || ticker.symbol === symbol;
         });
         if (matchingTicker) {
           tableSymbol = matchingTicker.symbol.replace('USDT', '');
+          logger.info(`[BINANCE_SPOT_DEBUG] Found matching ticker: ${tableSymbol}, volume: ${matchingTicker.originalQuoteVolume}`);
+        } else {
+          logger.warn(`[BINANCE_SPOT_DEBUG] No matching ticker found for: ${searchSymbol}`);
         }
       } else if (exchange === 'upbit') {
         const upbitData = realTimeVolumeService.getUpbitData();
@@ -209,17 +217,24 @@ export class VolumeService {
         } else {
           logger.warn(`[UPBIT_CHART_DEBUG] No matching upbit ticker found for: ${searchSymbol}`);
         }
-      } else if (exchange === 'bybit') {
+      } else if (exchange === 'bybit' || exchange === 'bybit-spot') {
+        // Handle both PERP (bybit) and SPOT (bybit-spot)
+        const isSpot = exchange === 'bybit-spot';
         const bybitData = realTimeVolumeService.getBybitData ? realTimeVolumeService.getBybitData() : [];
         const searchSymbol = symbol.endsWith('USDT') ? symbol.replace('USDT', '') : symbol;
         matchingTicker = bybitData.find((ticker: any) => {
           const tickerSymbol = ticker.symbol.replace('USDT', '');
-          return tickerSymbol === searchSymbol || ticker.symbol === symbol;
+          // For spot, only match spot tickers; for perp, match all
+          const matchesSymbol = tickerSymbol === searchSymbol || ticker.symbol === symbol;
+          return matchesSymbol;
         });
         if (matchingTicker) {
           tableSymbol = matchingTicker.symbol.replace('USDT', '');
+          logger.info(`[BYBIT_${isSpot ? 'SPOT' : 'PERP'}_DEBUG] Found matching ticker: ${tableSymbol}, volume: ${matchingTicker.originalQuoteVolume}`);
         }
-      } else if (exchange === 'okx') {
+      } else if (exchange === 'okx' || exchange === 'okx-spot') {
+        // Handle both PERP (okx) and SPOT (okx-spot)
+        const isSpot = exchange === 'okx-spot';
         const okxData = realTimeVolumeService.getOkxData ? realTimeVolumeService.getOkxData() : [];
         const searchSymbol = symbol.endsWith('-USDT') ? symbol.replace('-USDT', '') : symbol;
         matchingTicker = okxData.find((ticker: any) => {
@@ -228,8 +243,11 @@ export class VolumeService {
         });
         if (matchingTicker) {
           tableSymbol = matchingTicker.symbol.replace('-USDT', '');
+          logger.info(`[OKX_${isSpot ? 'SPOT' : 'PERP'}_DEBUG] Found matching ticker: ${tableSymbol}, volume: ${matchingTicker.originalQuoteVolume}`);
         }
-      } else if (exchange === 'gateio') {
+      } else if (exchange === 'gateio' || exchange === 'gateio-spot') {
+        // Handle both PERP (gateio) and SPOT (gateio-spot)
+        const isSpot = exchange === 'gateio-spot';
         const gateioData = realTimeVolumeService.getGateioData ? realTimeVolumeService.getGateioData() : [];
         const searchSymbol = symbol.endsWith('-USDT') ? symbol.replace('-USDT', '') : symbol;
         matchingTicker = gateioData.find((ticker: any) => {
@@ -238,8 +256,11 @@ export class VolumeService {
         });
         if (matchingTicker) {
           tableSymbol = matchingTicker.symbol.replace('-USDT', '');
+          logger.info(`[GATEIO_${isSpot ? 'SPOT' : 'PERP'}_DEBUG] Found matching ticker: ${tableSymbol}, volume: ${matchingTicker.originalQuoteVolume}`);
         }
-      } else if (exchange === 'bitget') {
+      } else if (exchange === 'bitget' || exchange === 'bitget-spot') {
+        // Handle both PERP (bitget) and SPOT (bitget-spot)
+        const isSpot = exchange === 'bitget-spot';
         const bitgetData = realTimeVolumeService.getBitgetData ? realTimeVolumeService.getBitgetData() : [];
         const searchSymbol = symbol.endsWith('-USDT') ? symbol.replace('-USDT', '') : symbol;
         matchingTicker = bitgetData.find((ticker: any) => {
@@ -248,18 +269,22 @@ export class VolumeService {
         });
         if (matchingTicker) {
           tableSymbol = matchingTicker.symbol.replace('-USDT', '');
+          logger.info(`[BITGET_${isSpot ? 'SPOT' : 'PERP'}_DEBUG] Found matching ticker: ${tableSymbol}, volume: ${matchingTicker.originalQuoteVolume}`);
         }
-      } else if (exchange === 'mexc') {
+      } else if (exchange === 'mexc' || exchange === 'mexc-spot') {
         // MEXC has both spot and futures data
+        const isSpot = exchange === 'mexc-spot';
         const mexcData = realTimeVolumeService.getMexcData ? realTimeVolumeService.getMexcData() : { spot: [], futures: [] };
-        const allMexcData = [...mexcData.spot, ...mexcData.futures];
+        // For spot, only use spot data; for perp, use futures data
+        const dataSource = isSpot ? mexcData.spot : mexcData.futures;
         const searchSymbol = symbol.endsWith('USDT') ? symbol.replace('USDT', '') : symbol;
-        matchingTicker = allMexcData.find((ticker: any) => {
+        matchingTicker = dataSource.find((ticker: any) => {
           const tickerSymbol = ticker.symbol.replace('USDT', '');
           return tickerSymbol === searchSymbol || ticker.symbol === symbol;
         });
         if (matchingTicker) {
           tableSymbol = matchingTicker.symbol.replace('USDT', '');
+          logger.info(`[MEXC_${isSpot ? 'SPOT' : 'PERP'}_DEBUG] Found matching ticker: ${tableSymbol}, volume: ${matchingTicker.originalQuoteVolume}`);
         }
       } else if (exchange === 'bithumb') {
         const bithumbData = realTimeVolumeService.getBithumbData ? realTimeVolumeService.getBithumbData() : [];

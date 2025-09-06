@@ -91,8 +91,11 @@ export class BinanceRestApiService extends EventEmitter {
       
       // OI symbols list updated
       
-      // Get OI data - simplified to empty map for now
-      const openInterestResponse = [];
+      // Get OI data - fetch for top volume symbols only due to rate limits
+      const openInterestResponse = await this.fetchOpenInterestData(allSymbols.slice(0, 50)).catch(err => {
+        logger.error('Error fetching open interest:', err.message);
+        return [];
+      });
       
       const processingStart = Date.now();
       
@@ -137,6 +140,49 @@ export class BinanceRestApiService extends EventEmitter {
     }
   }
   
+  private async fetchOpenInterestData(symbols: string[]): Promise<any[]> {
+    try {
+      const batchSize = 30;
+      const results: any[] = [];
+      
+      for (let i = 0; i < symbols.length; i += batchSize) {
+        const batch = symbols.slice(i, i + batchSize);
+        const batchPromises = batch.map(async (symbol) => {
+          try {
+            const response = await axios.get('https://fapi.binance.com/fapi/v1/openInterest', {
+              params: { symbol },
+              timeout: 5000
+            });
+            
+            if (response.data) {
+              return {
+                symbol,
+                openInterest: response.data.openInterest,
+                lastPrice: response.data.lastPrice || 0
+              };
+            }
+            return null;
+          } catch (err) {
+            return null;
+          }
+        });
+        
+        const batchResults = await Promise.all(batchPromises);
+        const validResults = batchResults.filter((r): r is any => r !== null);
+        results.push(...validResults);
+        
+        if (i + batchSize < symbols.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      
+      logger.info(`Fetched open interest data for ${results.length} symbols`);
+      return results;
+    } catch (error) {
+      logger.error('Error in fetchOpenInterestData:', error);
+      return [];
+    }
+  }
   
   private processFrOiData(premiumIndexData: any[], openInterests: any[]) {
     // Clear previous data

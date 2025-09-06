@@ -365,11 +365,18 @@ export class VolumeRankingController {
       }
 
       const mexcData = realTimeVolumeService.getMexcData();
+      const hourlyTracker = HourlyRankTracker.getInstance();
+      
+      // Add hourly data to each ranking for spot data
+      const enhancedSpotData = (mexcData.spot || []).map((item: any) => ({
+        ...item,
+        hourlyChanges: hourlyTracker.getFormattedHourlyChanges('mexc', item.symbol)
+      }));
       
       const response: ApiResponse<any> = {
         success: true,
         data: {
-          rankings: mexcData.spot || [],
+          rankings: enhancedSpotData,
           futures: mexcData.futures || [],
           exchange: 'mexc',
           updateTime: new Date().toISOString(),
@@ -402,14 +409,21 @@ export class VolumeRankingController {
       }
 
       const bithumbData = realTimeVolumeService.getBithumbData();
+      const hourlyTracker = HourlyRankTracker.getInstance();
+      
+      // Add hourly data to each ranking
+      const enhancedData = bithumbData.map((item: any) => ({
+        ...item,
+        hourlyChanges: hourlyTracker.getFormattedHourlyChanges('bithumb', item.symbol)
+      }));
       
       const response: ApiResponse<any> = {
         success: true,
         data: {
-          rankings: bithumbData,
+          rankings: enhancedData,
           exchange: 'bithumb',
           updateTime: new Date().toISOString(),
-          totalPairs: bithumbData.length
+          totalPairs: enhancedData.length
         },
         timestamp: new Date().toISOString()
       };

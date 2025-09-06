@@ -40,6 +40,7 @@ interface VolumeDetailChartProps {
   onClose: () => void;
   symbol: string;
   exchange: string;
+  marketType?: 'SPOT' | 'PERP';
 }
 
 interface VolumeChartData {
@@ -57,6 +58,7 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
   onClose,
   symbol,
   exchange,
+  marketType,
 }) => {
   const [chartData, setChartData] = useState<VolumeChartData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,15 +69,22 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
       fetchVolumeChart();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, symbol, exchange, timeframe]);
+  }, [open, symbol, exchange, marketType, timeframe]);
 
   const fetchVolumeChart = async () => {
     try {
       setLoading(true);
       
+      // Build the exchange parameter with market type if applicable
+      let exchangeParam = exchange;
+      if (marketType) {
+        // For exchanges that support SPOT/PERP, append the market type
+        exchangeParam = marketType === 'SPOT' ? `${exchange}-spot` : exchange;
+      }
+      
       // API endpoint for volume chart data
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/volume/symbol/${exchange}/${symbol}?interval=5m&limit=48`
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/volume/symbol/${exchangeParam}/${symbol}?interval=5m&limit=48`
       );
       
       if (response.ok) {
@@ -186,7 +195,10 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
   };
 
   const formatVolume = (volume: number) => {
-    // 常にミリオン単位で表示
+    // 1000M以上はB表記、それ以外はM表記
+    if (volume >= 1e9) {
+      return `$${(volume / 1e9).toFixed(2)}B`;
+    }
     return `$${(volume / 1e6).toFixed(1)}M`;
   };
 
@@ -420,7 +432,7 @@ const VolumeDetailChart: React.FC<VolumeDetailChartProps> = ({
       <DialogTitle sx={{ borderBottom: '1px solid #333' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="h6" sx={{ color: 'white' }}>
-            📈 {symbol} 出来高チャート - {exchange.toUpperCase()}
+            📈 {symbol} 出来高チャート - {exchange.toUpperCase()}{marketType ? ` (${marketType})` : ''}
           </Typography>
           <Box sx={{ textAlign: 'right' }}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>

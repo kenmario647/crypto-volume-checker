@@ -69,10 +69,10 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<string>('');
   const [autoUpdate, setAutoUpdate] = useState(true);
-  const [selectedSymbol, setSelectedSymbol] = useState<{ symbol: string; exchange: string } | null>(null);
+  const [selectedSymbol, setSelectedSymbol] = useState<{ symbol: string; exchange: string; marketType?: 'SPOT' | 'PERP' } | null>(null);
 
   // Determine if exchange supports SPOT/PERP
-  const supportsSPOTPERP = ['binance', 'bybit', 'okx', 'gateio', 'bitget', 'mexc', 'upbit', 'coinbase', 'bithumb'].includes(exchange);
+  const supportsSPOTPERP = ['binance', 'bybit', 'okx', 'gateio', 'bitget', 'mexc'].includes(exchange);
 
   useEffect(() => {
     // Initial data fetch
@@ -198,31 +198,6 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
   const fetchBothMarketTypes = async () => {
     try {
       setLoading(true);
-      
-      // Special handling for SPOT-only exchanges (Upbit, Bithumb, Coinbase)
-      if (['upbit', 'bithumb', 'coinbase'].includes(exchange)) {
-        const spotResponse = await axios.get(
-          `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/spot-perp-volume/spot`,
-          { params: { exchange, limit: 15 } }
-        );
-        
-        if (spotResponse.data.success) {
-          console.log(`${exchange} SPOT data received:`, spotResponse.data.data?.length, 'items');
-          if (exchange === 'upbit') {
-            console.log('Full Upbit spot data:', spotResponse.data.data?.map((item: any) => ({
-              rank: item.rank,
-              symbol: item.symbol,
-              volumeUsd: item.volumeUsd
-            })));
-          }
-          setSpotData(spotResponse.data.data);
-          setPerpData([]); // No PERP data for these exchanges
-        }
-        
-        setLastUpdate(new Date().toLocaleTimeString());
-        setLoading(false);
-        return;
-      }
       
       // Special handling for MEXC
       if (exchange === 'mexc') {
@@ -370,7 +345,36 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
       })));
       
       if (result.success) {
-        if (exchange === 'mexc') {
+        // Handle Bithumb and Coinbase as spot-only exchanges
+        if (exchange === 'bithumb' || exchange === 'coinbase') {
+          const data = result.data.rankings || result.data[exchange];
+          const rankings = data ? data.slice(0, 15) : [];
+          
+          // Transform data for spot display
+          const transformedSpot = rankings.map((item: any) => ({
+            rank: item.rank,
+            symbol: item.symbol,
+            price: parseFloat(item.lastPrice?.replace(/[$,]/g, '') || '0'),
+            change24h: parseFloat(item.priceChangePercent?.replace('%', '') || '0'),
+            volume24h: item.originalQuoteVolume || parseFloat(item.quoteVolume?.replace(/[$,BMK]/g, '') || '0'),
+            exchange: exchange,
+            previousRank: item.previousRank,
+            rankChanged: item.rankChanged,
+            newRankIn: item.newRankIn
+          }));
+          
+          setSpotData(transformedSpot);
+          setPerpData([]); // No futures data for these exchanges
+          
+          // Store initial ranks
+          const newInitialRankMap = new Map<string, number>();
+          rankings.forEach((item: VolumeRankingData) => {
+            newInitialRankMap.set(item.symbol, item.initialRank || item.rank);
+          });
+          setInitialRankMap(newInitialRankMap);
+          
+          setExchangeData(rankings);
+        } else if (exchange === 'mexc') {
           // Handle MEXC special case with spot and futures - transform data
           if (result.data.rankings) {
             const transformedSpot = result.data.rankings.slice(0, 15).map((item: any) => ({
@@ -603,14 +607,14 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
     return volumeString;
   };
 
-  const handleSymbolClick = (symbol: string, exchange: string) => {
+  const handleSymbolClick = (symbol: string, exchange: string, marketType?: 'SPOT' | 'PERP') => {
     let formattedSymbol = symbol;
     
     if (exchange === 'binance' && !symbol.endsWith('USDT')) {
       formattedSymbol = `${symbol}USDT`;
     }
     
-    setSelectedSymbol({ symbol: formattedSymbol, exchange });
+    setSelectedSymbol({ symbol: formattedSymbol, exchange, marketType });
   };
 
   const renderSpotPerpTable = (data: SpotPerpVolumeData[], marketType: 'SPOT' | 'PERP') => (
@@ -652,7 +656,7 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
                 key={`${row.symbol}-${marketType}`} 
                 hover 
                 sx={{ cursor: 'pointer' }}
-                onClick={() => handleSymbolClick(row.symbol, exchange)}
+                onClick={() => handleSymbolClick(row.symbol, exchange, marketType)}
               >
                 <TableCell>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -772,7 +776,7 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
                 key={`${row.exchange}-${row.symbol}`} 
                 hover 
                 sx={{ cursor: 'pointer' }}
-                onClick={() => handleSymbolClick(row.symbol, row.exchange)}
+                onClick={() => handleSymbolClick(row.symbol, row.exchange, 'SPOT')}
               >
                 <TableCell>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -925,6 +929,7 @@ const ExchangeVolumeTableDual: React.FC<ExchangeVolumeTableDualProps> = ({ excha
           onClose={() => setSelectedSymbol(null)}
           symbol={selectedSymbol.symbol}
           exchange={selectedSymbol.exchange}
+          marketType={selectedSymbol.marketType}
         />
       )}
     </Box>
